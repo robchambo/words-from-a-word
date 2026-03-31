@@ -1,0 +1,102 @@
+[
+  {
+    "sourceWord": "strawberry",
+    "required": ["bar", "bare", "bear", "best", "brew", "rare", "rate", "rest", "star", "stare", "straw", "water"],
+    "bonus": ["berry", "swear", "yeast"]
+  },
+  {
+    "sourceWord": "carpenter",
+    "required": ["ant", "apt", "arc", "art", "can", "cap", "car", "cat", "ear", "eat", "net", "pan"],
+    "bonus": ["canter", "parent", "recant"]
+  },
+  {
+    "sourceWord": "chocolate",
+    "required": ["ace", "act", "ale", "cat", "coal", "coat", "cola", "cool", "each", "echo", "lace", "late"],
+    "bonus": ["locate", "hotel"]
+  },
+  {
+    "sourceWord": "mountains",
+    "required": ["aim", "ant", "aunt", "man", "mat", "mint", "moan", "most", "noun", "nut", "oat", "omit"],
+    "bonus": ["mount", "saint", "satin"]
+  },
+  {
+    "sourceWord": "blackboard",
+    "required": ["arc", "ark", "bar", "bark", "black", "board", "bold", "back", "cord", "dark", "coal", "lock"],
+    "bonus": ["broad", "coral", "block"]
+  },
+  {
+    "sourceWord": "breakfast",
+    "required": ["ark", "art", "ask", "bar", "bare", "bark", "base", "bear", "beat", "best", "fast", "rake"],
+    "bonus": ["basket", "beast", "steak"]
+  },
+  {
+    "sourceWord": "telephone",
+    "required": ["eel", "hen", "hole", "lone", "lope", "note", "open", "peel", "peon", "poet", "pole", "tone"],
+    "bonus": ["hotel", "teen", "heel"]
+  },
+  {
+    "sourceWord": "adventure",
+    "required": ["ant", "art", "dare", "dart", "date", "dune", "earn", "near", "neat", "rent", "rude", "turn"],
+    "bonus": ["trade", "raven", "trend"]
+  },
+  {
+    "sourceWord": "fireworks",
+    "required": ["few", "fir", "fire", "fork", "fore", "foe", "ore", "owe", "row", "sir", "ski", "wire"],
+    "bonus": ["rife", "work", "skier"]
+  },
+  {
+    "sourceWord": "landscape",
+    "required": ["ace", "ale", "and", "ape", "clad", "clan", "clap", "cane", "cape", "lace", "land", "lane"],
+    "bonus": ["candle", "plane", "place"]
+  },
+  {
+    "sourceWord": "waterfall",
+    "required": ["all", "art", "ate", "awe", "fall", "fare", "fat", "flat", "flaw", "late", "law", "leaf"],
+    "bonus": ["feral", "alter", "alert"]
+  },
+  {
+    "sourceWord": "butterfly",
+    "required": ["belt", "blur", "bury", "but", "buy", "felt", "fuel", "left", "lure", "rule", "ruby", "true"],
+    "bonus": ["flute", "utter", "flutter"]
+  },
+  {
+    "sourceWord": "classroom",
+    "required": ["arc", "arm", "car", "coal", "cool", "coral", "cram", "loom", "molar", "moral", "oral", "roam"],
+    "bonus": ["class", "solar", "macro"]
+  },
+  {
+    "sourceWord": "newspaper",
+    "required": ["ape", "asp", "awe", "ear", "nap", "nape", "near", "pane", "pear", "reap", "sane", "swan"],
+    "bonus": ["snare", "spare", "spawn"]
+  },
+  {
+    "sourceWord": "basketball",
+    "required": ["all", "ask", "ball", "base", "bask", "blast", "last", "salt", "slab", "slat", "talk", "tale"],
+    "bonus": ["basket", "table", "stale"]
+  },
+  {
+    "sourceWord": "thunderstorm",
+    "required": ["drum", "dune", "moth", "mound", "mount", "must", "north", "nut", "rout", "rude", "rust", "horn"],
+    "bonus": ["mourn", "storm", "trout"]
+  },
+  {
+    "sourceWord": "springtime",
+    "required": ["emit", "grim", "grin", "grip", "mine", "mint", "mire", "mist", "pint", "pine", "ring", "ripe"],
+    "bonus": ["prime", "print", "spine"]
+  },
+  {
+    "sourceWord": "pineapple",
+    "required": ["ale", "ape", "app", "lane", "lean", "line", "lip", "nail", "nap", "nape", "pail", "pine"],
+    "bonus": ["alien", "apple", "plain"]
+  },
+  {
+    "sourceWord": "chemistry",
+    "required": ["chest", "chime", "cite", "emit", "etch", "heir", "hem", "her", "hire", "itch", "item", "mice"],
+    "bonus": ["hermit", "metric", "thrice"]
+  },
+  {
+    "sourceWord": "playground",
+    "required": ["drag", "drop", "drug", "dung", "gland", "glory", "gold", "gory", "gray", "groan", "ground", "long"],
+    "bonus": ["round", "young", "along"]
+  }
+]
