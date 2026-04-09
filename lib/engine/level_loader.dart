@@ -53,8 +53,7 @@ class LevelLoader {
     ];
 
     final letters = sourceWord.toLowerCase().split('');
-    final shuffled = GameEngine.shuffleList(letters);
-    final sourceLetters = shuffled.asMap().entries.map((e) {
+    final sourceLetters = letters.asMap().entries.map((e) {
       return LetterTile(
         id: 'tile-${e.key}-${e.value}-$levelNumber',
         letter: e.value,
