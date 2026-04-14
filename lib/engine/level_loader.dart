@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../models/game_state.dart';
 import '../models/language_mode.dart';
-import 'game_engine.dart';
+import 'dictionary.dart';
 
 class LevelLoader {
   static List<Map<String, dynamic>>? _russianDefs;
@@ -31,26 +31,29 @@ class LevelLoader {
     final def = defs[(levelNumber - 1) % defs.length];
 
     final sourceWord = def['sourceWord'] as String;
-    final required = List<String>.from(def['required'] as List);
-    final bonus = List<String>.from(def['bonus'] as List? ?? []);
+    final overrideExcluded = Set<String>.from(
+      ((def['overrides']?['excluded']) as List? ?? [])
+          .map((e) => e.toString().toLowerCase()),
+    );
 
-    final validRequired = required
-        .toSet()
-        .where((w) => GameEngine.canFormWord(w, sourceWord))
-        .take(12)
+    final formable = Dictionary.formableWords(sourceWord, mode);
+
+    final targetWords = formable
+        .map((word) {
+          final wc = Dictionary.classify(
+            word,
+            mode: mode,
+            overrideExcluded: overrideExcluded,
+          );
+          if (wc == WordClass.excluded) return null;
+          return TargetWord(
+            word: word,
+            length: word.length,
+            isBonus: wc == WordClass.bonus,
+          );
+        })
+        .whereType<TargetWord>()
         .toList();
-
-    final validBonus = bonus
-        .toSet()
-        .where((w) => GameEngine.canFormWord(w, sourceWord))
-        .toList();
-
-    final targetWords = [
-      ...validRequired.map(
-          (w) => TargetWord(word: w, length: w.length, isBonus: false)),
-      ...validBonus
-          .map((w) => TargetWord(word: w, length: w.length, isBonus: true)),
-    ];
 
     final letters = sourceWord.toLowerCase().split('');
     final sourceLetters = letters.asMap().entries.map((e) {
@@ -65,7 +68,7 @@ class LevelLoader {
       sourceWord: sourceWord,
       sourceLetters: sourceLetters,
       targetWords: targetWords,
-      totalWords: validRequired.length,
+      totalWords: targetWords.where((w) => !w.isBonus).length,
     );
   }
 }

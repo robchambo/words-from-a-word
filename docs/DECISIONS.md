@@ -4,13 +4,15 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 
 ---
 
-## D1 — No dictionary files; validation is level-only
+## D1 — No dictionary files; validation is level-only *(superseded by D10)*
 
 **Decision:** Word validation is purely against each level's `targetWords` list. The `russian_valid_words.txt` and `english_valid_words.txt` files from the original spec were not created.
 
 **Why:** Dictionary files add asset weight, require loading and Set construction at startup, and enable arbitrary word entry — which is a different (harder) game design. The curated level approach gives the game designer full control over which words count. Open-ended bonus detection can be added later if needed.
 
 **Impact:** `assets/data/*.txt` files do not exist and are not referenced in `pubspec.yaml`. `engine/dictionary.dart` from the spec was never created.
+
+*This decision was revisited and reversed. See D10.*
 
 ---
 
@@ -85,3 +87,29 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 **Decision:** `flutter_svg` and `flutter_localizations` (listed in the original spec's `pubspec.yaml`) were not added as dependencies.
 
 **Why:** No SVG assets are used — the design is achieved with Flutter primitives and CustomPainter. Localisation is handled by simple `StringsRu`/`StringsEn` constant classes, which is sufficient for a two-language app without needing the full ARB/intl pipeline.
+
+---
+
+## D10 — Dynamic dictionary with frequency-based word classification (supersedes D1)
+
+**Decision:** Word validation is backed by a real frequency-ranked word list (`assets/data/ru_freq.txt`), sourced from [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) (MIT licence). Words formable from the source letters are classified at level-load time rather than hand-curated per level.
+
+**Classification rules:**
+- **Required** — in dictionary, ≤6 letters, frequency rank above threshold → shown as blank slots in the existing UI
+- **Bonus** — in dictionary, >6 letters OR frequency rank below threshold → dynamically discovered, shown in bonus section
+- **Excluded** — suppressed via per-level `overrides` in the level JSON (e.g. words that appear across too many levels) → accepted but award no points
+
+**Why:** Hand-curated word lists miss valid words (e.g. "род" in level 1), require ongoing maintenance, and don't scale to 50+ levels. A frequency-ranked dictionary gives players a consistent and fair experience while keeping common words as required targets and rare/long words as rewarding discoveries.
+
+**Thresholds:** Frequency cut-off and length cut-off (currently 6 letters) are named constants in `engine/dictionary.dart`. Both can be changed in one place without touching level data or game logic.
+
+**Word classification enum:** `WordClass { required, bonus, excluded }`. Adding a new category is a one-line change to the enum.
+
+**Per-level overrides:** Level JSON may include an `overrides` block to demote specific words regardless of their dictionary classification:
+```json
+{ "sourceWord": "переводчик", "overrides": { "excluded": ["вор"] } }
+```
+
+**Source word selection:** Source words (12+ letters) are chosen manually to ensure levels are interesting and consistent across users. A pool of 50 initial source words will be selected together, spanning high, medium, and low frequency.
+
+**Impact:** `engine/dictionary.dart` created. `engine/level_loader.dart` rewritten. `assets/data/ru_freq.txt` bundled. Level JSON simplified to `sourceWord` + optional `overrides`. Old hand-curated `required`/`bonus` arrays removed.
