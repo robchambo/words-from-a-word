@@ -1,0 +1,132 @@
+# Word blocklist for the level generator.
+# One word per line. Lines starting with # are ignored.
+# Add words here as they are discovered during generation review.
+# See docs/DECISIONS.md D11 for rationale.
+#
+# The generator only processes lemma forms, so each entry here blocks that
+# lemma and all its conjugations/declensions.
+#
+# ============================================================
+# SECTION 1: NOISE
+# Non-words, fragments, abbreviations, and borrowed terms that
+# pymorphy3 passes as valid but don't belong in a word game.
+# ============================================================
+
+# Abbreviations / acronyms
+анб
+врн
+днк
+тсс
+
+# Fragments and malformed forms (letter sequences that aren't real Russian words,
+# or truncated forms where the correct word is different, e.g. лос→лось, сол→соль)
+лме
+сли
+огда
+пон
+бла
+теб
+дикс
+ааа
+лос
+сол
+сир
+росс
+хон
+сун
+даг
+
+# Borrowed words / slang
+вау
+воу
+тако
+бро
+неа
+
+# Transliterated foreign names (proper-noun filter misses these)
+тео
+ноа
+итан
+бри
+лекс
+клер
+харт
+такер
+венди
+стоун
+рио
+тори
+
+# Fragments from lower-frequency generation (комсомолец, литература, территория)
+елс
+кес
+лок
+мес
+мол
+кол
+сем
+космо
+ерт
+теа
+тил
+уил
+ури
+аут
+ито
+оти
+тор
+трио
+
+# ============================================================
+# SECTION 2: PROFANITY
+# Russian mat roots and their prefixed verb forms.
+# Source: seeded from known Russian mat roots.
+# Prefixed derivatives (e.g. выебать, наебать) are separate
+# lemmas and must be listed separately.
+# ============================================================
+
+# хуй family
+хуй
+похуй
+хуёвый
+
+# пизда family
+пизда
+пиздить
+пиздец
+
+# ебать family
+ебать
+выебать
+заебать
+наебать
+отъебать
+поебать
+съебать
+уебать
+
+# блядь family
+блядь
+блядский
+блядун
+
+# мудак family
+мудак
+
+# сука / сукин
+сука
+сукин
+
+# пидор family
+пидор
+пидорас
+
+# курва
+курва
+
+# прочее (misc)
+залупа
+шлюха
+долбоёб
+манда
+пенис

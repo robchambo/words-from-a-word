@@ -27,6 +27,7 @@ class StringsEn {
   static const String allFoundPrompt = 'Excellent!';
   static const String selectLetters = 'Select letters';
   static const String bonusLabel = 'Bonus';
+  static const String tooCommonWord = 'Word is too common!';
 
   static String lettersHeader(int n) => '$n LETTERS';
 

@@ -48,6 +48,7 @@ class GameLevel {
   final String sourceWord;
   final List<LetterTile> sourceLetters;
   final List<TargetWord> targetWords;
+  final List<String> tooCommon;
   final int totalWords;
 
   const GameLevel({
@@ -56,6 +57,7 @@ class GameLevel {
     required this.sourceLetters,
     required this.targetWords,
     required this.totalWords,
+    this.tooCommon = const [],
   });
 
   GameLevel copyWith({
@@ -68,10 +70,11 @@ class GameLevel {
         sourceLetters: sourceLetters ?? this.sourceLetters,
         targetWords: targetWords ?? this.targetWords,
         totalWords: totalWords,
+        tooCommon: tooCommon,
       );
 }
 
-enum WordValidationResult { found, alreadyFound, bonus, invalid }
+enum WordValidationResult { found, alreadyFound, bonus, tooCommon, invalid }
 
 class GameState {
   final GameLevel level;
@@ -83,6 +86,7 @@ class GameState {
   final bool isShaking;
   final bool isLevelComplete;
   final String? lastFoundWord;
+  final String? tooCommonWord;
 
   final Map<String, int> hintedLetterCounts;
 
@@ -96,6 +100,7 @@ class GameState {
     this.isShaking = false,
     this.isLevelComplete = false,
     this.lastFoundWord,
+    this.tooCommonWord,
     this.hintedLetterCounts = const {},
   });
 
@@ -110,6 +115,8 @@ class GameState {
     bool? isLevelComplete,
     String? lastFoundWord,
     bool clearLastFoundWord = false,
+    String? tooCommonWord,
+    bool clearTooCommonWord = false,
     Map<String, int>? hintedLetterCounts,
   }) =>
       GameState(
@@ -123,6 +130,8 @@ class GameState {
         isLevelComplete: isLevelComplete ?? this.isLevelComplete,
         lastFoundWord:
             clearLastFoundWord ? null : (lastFoundWord ?? this.lastFoundWord),
+        tooCommonWord:
+            clearTooCommonWord ? null : (tooCommonWord ?? this.tooCommonWord),
         hintedLetterCounts: hintedLetterCounts ?? this.hintedLetterCounts,
       );
 }

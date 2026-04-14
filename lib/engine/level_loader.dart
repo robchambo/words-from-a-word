@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../models/game_state.dart';
 import '../models/language_mode.dart';
-import 'dictionary.dart';
+import 'game_engine.dart';
 
 class LevelLoader {
   static List<Map<String, dynamic>>? _russianDefs;
@@ -31,29 +31,23 @@ class LevelLoader {
     final def = defs[(levelNumber - 1) % defs.length];
 
     final sourceWord = def['sourceWord'] as String;
-    final overrideExcluded = Set<String>.from(
-      ((def['overrides']?['excluded']) as List? ?? [])
-          .map((e) => e.toString().toLowerCase()),
-    );
 
-    final formable = Dictionary.formableWords(sourceWord, mode);
-
-    final targetWords = formable
-        .map((word) {
-          final wc = Dictionary.classify(
-            word,
-            mode: mode,
-            overrideExcluded: overrideExcluded,
-          );
-          if (wc == WordClass.excluded) return null;
-          return TargetWord(
-            word: word,
-            length: word.length,
-            isBonus: wc == WordClass.bonus,
-          );
-        })
-        .whereType<TargetWord>()
+    // canFormWord is a safety net — silently drops any word the generator
+    // may have incorrectly included, without crashing at runtime.
+    final required = List<String>.from(def['required'] ?? [])
+        .where((w) => GameEngine.canFormWord(w, sourceWord))
         .toList();
+    final bonus = List<String>.from(def['bonus'] ?? [])
+        .where((w) => GameEngine.canFormWord(w, sourceWord))
+        .toList();
+    final tooCommon = List<String>.from(def['tooCommon'] ?? [])
+        .where((w) => GameEngine.canFormWord(w, sourceWord))
+        .toList();
+
+    final targetWords = [
+      ...required.map((w) => TargetWord(word: w, length: w.length)),
+      ...bonus.map((w) => TargetWord(word: w, length: w.length, isBonus: true)),
+    ];
 
     final letters = sourceWord.toLowerCase().split('');
     final sourceLetters = letters.asMap().entries.map((e) {
@@ -68,7 +62,8 @@ class LevelLoader {
       sourceWord: sourceWord,
       sourceLetters: sourceLetters,
       targetWords: targetWords,
-      totalWords: targetWords.where((w) => !w.isBonus).length,
+      tooCommon: tooCommon,
+      totalWords: required.length,
     );
   }
 }

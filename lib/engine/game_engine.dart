@@ -27,10 +27,12 @@ class GameEngine {
     required String sourceWord,
     required List<TargetWord> targetWords,
     required List<String> foundWords,
+    required List<String> tooCommon,
   }) {
     final w = word.toLowerCase();
     if (foundWords.contains(w)) return WordValidationResult.alreadyFound;
     if (!canFormWord(w, sourceWord)) return WordValidationResult.invalid;
+    if (tooCommon.contains(w)) return WordValidationResult.tooCommon;
 
     final target = targetWords.cast<TargetWord?>().firstWhere(
           (t) => t!.word == w,

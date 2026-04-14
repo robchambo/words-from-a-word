@@ -15,6 +15,7 @@ class GameProvider extends ChangeNotifier {
 
   Timer? _shakeTimer;
   Timer? _lastFoundTimer;
+  Timer? _tooCommonTimer;
 
   Future<void> startGame(LanguageMode mode, {int levelNumber = 1}) async {
     final level = LevelLoader.generateLevel(levelNumber, mode);
@@ -98,6 +99,7 @@ class GameProvider extends ChangeNotifier {
       sourceWord: s.level.sourceWord,
       targetWords: s.level.targetWords,
       foundWords: s.foundWords,
+      tooCommon: s.level.tooCommon,
     );
 
     if (result == WordValidationResult.invalid ||
@@ -109,6 +111,28 @@ class GameProvider extends ChangeNotifier {
       _shakeTimer?.cancel();
       _shakeTimer = Timer(const Duration(milliseconds: 400), () {
         _state = _state!.copyWith(isShaking: false);
+        notifyListeners();
+      });
+      return;
+    }
+
+    if (result == WordValidationResult.tooCommon) {
+      HapticFeedback.lightImpact();
+      _state = s.copyWith(
+        selectedTileIds: [],
+        currentInput: '',
+        tooCommonWord: word,
+        level: s.level.copyWith(
+          sourceLetters: s.level.sourceLetters
+              .map((t) => t.copyWith(isSelected: false))
+              .toList(),
+        ),
+      );
+      notifyListeners();
+
+      _tooCommonTimer?.cancel();
+      _tooCommonTimer = Timer(const Duration(milliseconds: 1500), () {
+        _state = _state!.copyWith(clearTooCommonWord: true);
         notifyListeners();
       });
       return;
@@ -227,6 +251,7 @@ class GameProvider extends ChangeNotifier {
   void dispose() {
     _shakeTimer?.cancel();
     _lastFoundTimer?.cancel();
+    _tooCommonTimer?.cancel();
     super.dispose();
   }
 }

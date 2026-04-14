@@ -27,6 +27,7 @@ class StringsRu {
   static const String allFoundPrompt = 'Отлично!';
   static const String selectLetters = 'Выберите буквы';
   static const String bonusLabel = 'Бонус';
+  static const String tooCommonWord = 'Слово слишком распространено!';
 
   static String lettersHeader(int n) {
     if (n == 1) return '1 БУКВА';

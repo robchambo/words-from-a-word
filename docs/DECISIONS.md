@@ -90,26 +90,36 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 
 ---
 
-## D10 — Dynamic dictionary with frequency-based word classification (supersedes D1)
+## D10 — Frequency-ranked dictionary as the source of truth for word lists (supersedes D1; refined by D11)
 
-**Decision:** Word validation is backed by a real frequency-ranked word list (`assets/data/ru_freq.txt`), sourced from [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) (MIT licence). Words formable from the source letters are classified at level-load time rather than hand-curated per level.
+**Decision:** Word lists are derived from a frequency-ranked dictionary (`assets/data/ru_freq.txt`), sourced from [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) (MIT licence), rather than hand-curated per level.
 
 **Classification rules:**
-- **Required** — in dictionary, ≤6 letters, frequency rank above threshold → shown as blank slots in the existing UI
-- **Bonus** — in dictionary, >6 letters OR frequency rank below threshold → dynamically discovered, shown in bonus section
-- **Excluded** — suppressed via per-level `overrides` in the level JSON (e.g. words that appear across too many levels) → accepted but award no points
+- **Too common** — frequency at or above upper threshold → formable but returns "Слово слишком распространено!" and zero points; stored in `tooCommon` array in the level JSON
+- **Required** — frequency in the medium band (between lower and upper thresholds), length ≤ max length → shown as blank slots
+- **Bonus** — frequency below lower threshold OR length above max length → discovered dynamically, shown in bonus section
+- **Excluded** — suppressed via per-level `overrides` → not surfaced to the player
 
 **Why:** Hand-curated word lists miss valid words (e.g. "род" in level 1), require ongoing maintenance, and don't scale to 50+ levels. A frequency-ranked dictionary gives players a consistent and fair experience while keeping common words as required targets and rare/long words as rewarding discoveries.
 
-**Thresholds:** Frequency cut-off and length cut-off (currently 6 letters) are named constants in `engine/dictionary.dart`. Both can be changed in one place without touching level data or game logic.
+**Thresholds:** All four thresholds (`MIN_WORD_LENGTH` = 3, `MAX_REQUIRED_LENGTH` = 5, `FREQ_THRESHOLD` = 1000, `MAX_FREQ` = 50000) are global constants in `generate.py` and can be overridden per level by passing keyword arguments to `generate_level()`.
 
-**Word classification enum:** `WordClass { required, bonus, excluded }`. Adding a new category is a one-line change to the enum.
+**Source word selection:** Source words (12+ letters) are chosen manually to ensure levels are interesting and consistent across users. A pool of 50 initial source words will be selected, spanning high, medium, and low frequency.
 
-**Per-level overrides:** Level JSON may include an `overrides` block to demote specific words regardless of their dictionary classification:
-```json
-{ "sourceWord": "переводчик", "overrides": { "excluded": ["вор"] } }
-```
+**Note on implementation:** Initially implemented as runtime classification via `engine/dictionary.dart`. Subsequently moved to an offline generator (`tools/level_generator/generate.py`) that writes pre-computed `required` and `bonus` arrays into the level JSON — see D11. The `engine/dictionary.dart` file and `ru_freq.txt` Flutter asset are transitional artifacts pending removal once the generator has populated all levels.
 
-**Source word selection:** Source words (12+ letters) are chosen manually to ensure levels are interesting and consistent across users. A pool of 50 initial source words will be selected together, spanning high, medium, and low frequency.
+---
 
-**Impact:** `engine/dictionary.dart` created. `engine/level_loader.dart` rewritten. `assets/data/ru_freq.txt` bundled. Level JSON simplified to `sourceWord` + optional `overrides`. Old hand-curated `required`/`bonus` arrays removed.
+## D11 — All filtering in the generator; dictionary stays raw (refines D10)
+
+**Decision:** `assets/data/ru_freq.txt` is kept raw and unmodified (Cyrillic-only entries, otherwise exactly as downloaded). All word filtering — lemmatization, POS filtering, proper noun removal, profanity blocklist, frequency thresholds, length thresholds — happens exclusively in `tools/level_generator/generate.py`.
+
+**Why:** Keeping the dictionary raw means it never needs to be regenerated or patched when filtering rules change — only the generator needs updating. It also ensures unusual forms (interesting conjugations, place names for themed levels) can be added back via manual overrides in the level JSON without modifying the dictionary.
+
+**Filters applied by the generator (with reasons):**
+- **Proper nouns** (`Name`, `Surn`, `Patr`, `Geox`, `Orgn`, `Trad` tags) — removed by default because they are not general vocabulary; may be added back manually for themed levels (e.g. geography, literature)
+- **Prepositions** (`PREP` POS) — removed because short prepositions feel like unearned answers; longer ones (перед, вокруг) may be added manually as bonus words where thematically fitting
+- **Profanity** — removed via a manually maintained blocklist at `tools/level_generator/blocklist.txt`
+- **Lemmatization** — only root forms included (nominative singular for nouns, infinitive for verbs, short form for adjectives) to avoid clutter from inflected duplicates; interesting conjugations may be added back manually
+
+**Impact:** `ru_freq.txt` has a comment header stating it is raw. The Flutter runtime never touches the dictionary — it reads only pre-computed `required` and `bonus` arrays from the level JSON. `tools/level_generator/generate.py` is the authoritative source for all word classification logic.

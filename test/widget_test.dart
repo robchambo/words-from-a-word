@@ -30,6 +30,7 @@ void main() {
           sourceWord: 'strawberry',
           targetWords: targets,
           foundWords: [],
+          tooCommon: const [],
         ),
         WordValidationResult.found,
       );
@@ -45,6 +46,7 @@ void main() {
           sourceWord: 'strawberry',
           targetWords: targets,
           foundWords: ['bar'],
+          tooCommon: const [],
         ),
         WordValidationResult.alreadyFound,
       );
@@ -60,6 +62,7 @@ void main() {
           sourceWord: 'strawberry',
           targetWords: targets,
           foundWords: [],
+          tooCommon: const [],
         ),
         WordValidationResult.bonus,
       );
@@ -75,6 +78,7 @@ void main() {
           sourceWord: 'strawberry',
           targetWords: targets,
           foundWords: [],
+          tooCommon: const [],
         ),
         WordValidationResult.invalid,
       );

@@ -231,13 +231,26 @@ class GameScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // Last found word celebration
+          // Status message: last found word OR too-common notice
           if (state.lastFoundWord != null)
             Expanded(
               child: Text(
                 '✓ ${state.lastFoundWord!.toUpperCase()}  +${_pointsForWord(state.lastFoundWord!)}',
                 style: AppTheme.condensedBold.copyWith(
                   color: AppTheme.primary,
+                  fontSize: 12,
+                ),
+              )
+                  .animate(onPlay: (c) => c.forward())
+                  .slideX(begin: -0.3, end: 0, duration: 200.ms)
+                  .fadeIn(duration: 200.ms),
+            )
+          else if (state.tooCommonWord != null)
+            Expanded(
+              child: Text(
+                isRu ? StringsRu.tooCommonWord : StringsEn.tooCommonWord,
+                style: AppTheme.condensedLabel.copyWith(
+                  color: AppTheme.mutedFg,
                   fontSize: 12,
                 ),
               )
