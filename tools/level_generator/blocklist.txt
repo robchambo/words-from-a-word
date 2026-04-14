@@ -1,132 +1,46 @@
 # Word blocklist for the level generator.
 # One word per line. Lines starting with # are ignored.
 # Add words here as they are discovered during generation review.
-# See docs/DECISIONS.md D11 for rationale.
+# See docs/DECISIONS.md D11 and D12 for rationale.
 #
 # The generator only processes lemma forms, so each entry here blocks that
 # lemma and all its conjugations/declensions.
 #
+# Note: the hunspell quality gate (D12) automatically rejects ~76% of noise
+# (fragments, loanword noise, morphological guesses). This file covers only
+# the residual cases that pass hunspell but do not belong in the game.
+#
 # ============================================================
 # SECTION 1: NOISE
-# Non-words, fragments, abbreviations, and borrowed terms that
-# pymorphy3 passes as valid but don't belong in a word game.
+# Words that pass the hunspell quality gate but are not suitable
+# for a Russian vocabulary word game: loanwords not yet naturalised,
+# abbreviations, archaic particles, and transliterated terms that
+# OpenCorpora includes as common nouns without proper-noun tags.
 # ============================================================
 
-# Abbreviations / acronyms
-анб
-врн
-днк
-тсс
+# Abbreviations
+мес
 
-# Fragments and malformed forms (letter sequences that aren't real Russian words,
-# or truncated forms where the correct word is different, e.g. лос→лось, сол→соль)
-лме
-сли
-огда
-пон
-бла
-теб
-дикс
-ааа
-лос
-сол
+# Particles / archaic conjunctions
+сем
+
+# Sports / entertainment loanwords
+аут
+
+# Transliterated names / foreign terms that OpenCorpora tags as common nouns
 сир
 росс
-хон
-сун
-даг
-
-# Borrowed words / slang
-вау
-воу
-тако
-бро
-неа
-
-# Transliterated foreign names (proper-noun filter misses these)
-тео
-ноа
-итан
-бри
-лекс
-клер
-харт
-такер
-венди
-стоун
-рио
 тори
-
-# Fragments from lower-frequency generation (комсомолец, литература, территория)
-елс
-кес
-лок
-мес
-мол
-кол
-сем
-космо
-ерт
-теа
-тил
-уил
-ури
-аут
-ито
-оти
-тор
-трио
 
 # ============================================================
 # SECTION 2: PROFANITY
-# Russian mat roots and their prefixed verb forms.
-# Source: seeded from known Russian mat roots.
-# Prefixed derivatives (e.g. выебать, наебать) are separate
-# lemmas and must be listed separately.
+# Russian mat roots whose lemma forms pass the hunspell dictionary.
+# Most mat vocabulary is rejected by hunspell; only these six pass.
 # ============================================================
 
-# хуй family
-хуй
-похуй
-хуёвый
-
-# пизда family
-пизда
-пиздить
-пиздец
-
-# ебать family
-ебать
-выебать
-заебать
-наебать
-отъебать
-поебать
-съебать
-уебать
-
-# блядь family
 блядь
-блядский
-блядун
-
-# мудак family
-мудак
-
-# сука / сукин
 сука
 сукин
-
-# пидор family
-пидор
-пидорас
-
-# курва
 курва
-
-# прочее (misc)
-залупа
 шлюха
-долбоёб
-манда
 пенис

@@ -48,14 +48,6 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 
 ---
 
-## D5 — Required words capped at 12 per level
-
-**Decision:** `LevelLoader.generateLevel()` silently caps required words at 12, even if the JSON defines more. Words beyond 12 are dropped (not demoted to bonus).
-
-**Why:** Keeps each level session to a manageable length. Any level JSON that defines more than 12 required words will be trimmed at load time.
-
----
-
 ## D6 — Score persists across levels; hints reset per level
 
 **Decision:** `GameProvider.nextLevel()` carries `score` forward but resets `hintsRemaining` to 3.
@@ -90,7 +82,7 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 
 ---
 
-## D10 — Frequency-ranked dictionary as the source of truth for word lists (supersedes D1; refined by D11)
+## D10 — Frequency-ranked dictionary as the source of truth for word lists (supersedes D1; refined by D11, D12)
 
 **Decision:** Word lists are derived from a frequency-ranked dictionary (`assets/data/ru_freq.txt`), sourced from [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) (MIT licence), rather than hand-curated per level.
 
@@ -106,20 +98,35 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 
 **Source word selection:** Source words (12+ letters) are chosen manually to ensure levels are interesting and consistent across users. A pool of 50 initial source words will be selected, spanning high, medium, and low frequency.
 
-**Note on implementation:** Initially implemented as runtime classification via `engine/dictionary.dart`. Subsequently moved to an offline generator (`tools/level_generator/generate.py`) that writes pre-computed `required` and `bonus` arrays into the level JSON — see D11. The `engine/dictionary.dart` file and `ru_freq.txt` Flutter asset are transitional artifacts pending removal once the generator has populated all levels.
+**Note on implementation:** Initially implemented as runtime classification via `engine/dictionary.dart`. Subsequently moved to an offline generator (`tools/level_generator/generate.py`) that writes pre-computed `required`, `bonus`, and `tooCommon` arrays into the level JSON — see D11. `engine/dictionary.dart` and the `ru_freq.txt` Flutter asset were removed once the generator took over all word classification.
 
 ---
 
-## D11 — All filtering in the generator; dictionary stays raw (refines D10)
+## D11 — All filtering in the generator; dictionary stays raw (refines D10; further refined by D12)
 
 **Decision:** `assets/data/ru_freq.txt` is kept raw and unmodified (Cyrillic-only entries, otherwise exactly as downloaded). All word filtering — lemmatization, POS filtering, proper noun removal, profanity blocklist, frequency thresholds, length thresholds — happens exclusively in `tools/level_generator/generate.py`.
 
 **Why:** Keeping the dictionary raw means it never needs to be regenerated or patched when filtering rules change — only the generator needs updating. It also ensures unusual forms (interesting conjugations, place names for themed levels) can be added back via manual overrides in the level JSON without modifying the dictionary.
 
 **Filters applied by the generator (with reasons):**
+- **Hunspell quality gate** — only words recognised by the LibreOffice Russian spell-checker are admitted; rejects ~76% of pymorphy3's morphological predictions. See D12.
 - **Proper nouns** (`Name`, `Surn`, `Patr`, `Geox`, `Orgn`, `Trad` tags) — removed by default because they are not general vocabulary; may be added back manually for themed levels (e.g. geography, literature)
 - **Prepositions** (`PREP` POS) — removed because short prepositions feel like unearned answers; longer ones (перед, вокруг) may be added manually as bonus words where thematically fitting
 - **Profanity** — removed via a manually maintained blocklist at `tools/level_generator/blocklist.txt`
 - **Lemmatization** — only root forms included (nominative singular for nouns, infinitive for verbs, short form for adjectives) to avoid clutter from inflected duplicates; interesting conjugations may be added back manually
 
 **Impact:** `ru_freq.txt` has a comment header stating it is raw. The Flutter runtime never touches the dictionary — it reads only pre-computed `required` and `bonus` arrays from the level JSON. `tools/level_generator/generate.py` is the authoritative source for all word classification logic.
+
+---
+
+## D12 — Hunspell as the primary word quality gate (refines D11)
+
+**Decision:** The LibreOffice Russian hunspell dictionary (`ru_RU`) is the authoritative source of what constitutes a real Russian word. In `generate_level()`, every candidate word is checked against hunspell before any further processing. Words that fail the check are silently skipped. The frequency list (`ru_freq.txt`) is used as the iteration source and for corpus frequency lookup, but is no longer treated as a word list in its own right.
+
+**Why:** pymorphy3's morphological prediction engine accepts ~76% noise — fragments, loanword sequences, and letter combinations that match Russian suffix patterns but are not real vocabulary. Filtering by pymorphy3's `word_is_known()` (OpenCorpora) reduced this but still admitted transliterated foreign names and unrecognised loanwords without any style marker to distinguish them from real words. The hunspell spell-checker dictionary, maintained for LibreOffice/OpenOffice, is more conservative: it targets words a native speaker would actually write, and in testing cleanly rejected the problematic residual while retaining real archaic and literary vocabulary (одр, вечор, вече, древо). The remaining noise that passes hunspell is small enough to manage via the manual blocklist.
+
+**Why iterate over ru_freq.txt rather than the hunspell .dic directly:** The hunspell `.dic` stores full adjective forms (`-ый/-ий`) as base entries. `get_lemma()` prefers short adjective forms (краткая форма, e.g. `красив` not `красивый`) for aesthetic reasons — they are shorter and more literary. Short forms do not appear in the `.dic` and would be silently lost if we iterated over it. The frequency list contains both full and short forms as separate corpus entries, so short-form adjectives are correctly seen and pass the `get_lemma(word) == word` check. Hunspell is applied as a quality gate on top of the frequency list rather than as the iteration source.
+
+**Dictionary source:** LibreOffice/dictionaries `ru_RU`, available at `https://github.com/LibreOffice/dictionaries/tree/master/ru_RU`. Licence: LGPL v3 / MPL 1.1 / GPL v3. The `.dic` and `.aff` files are installed locally via pyenchant and are not bundled in this repository.
+
+**Impact:** The `blocklist.txt` noise section shrank from ~50 entries with 3 programmatic RULE directives to 6 manually curated entries covering only the residual cases hunspell cannot distinguish from real vocabulary. The profanity section shrank from 30 entries to 6 (the remainder are rejected by hunspell directly).

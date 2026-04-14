@@ -122,15 +122,16 @@ Bonus: 0 pts for ≤3 letters, 10 for 4, 20 for 5, 30 for 6+
 ```json
 [
   {
-    "id": 1,
-    "sourceWord": "strawberry",
-    "required": ["bar", "star", "straw"],
-    "bonus": ["berry"]
+    "sourceWord": "переводчик",
+    "required": ["век", "вор", "вечер"],
+    "bonus": ["перо", "кедр"],
+    "tooCommon": ["три", "вот"],
+    "blocked": []
   }
 ]
 ```
 
-`LevelLoader` validates all words against `sourceWord` using `GameEngine.canFormWord()` at load time. Required words are capped at 12 per level.
+`LevelLoader` validates all words against `sourceWord` using `GameEngine.canFormWord()` at load time.
 
 ---
 

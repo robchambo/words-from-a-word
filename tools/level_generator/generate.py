@@ -1,13 +1,28 @@
 """
 Level generator for Слова из Слова.
 
-Reads assets/data/ru_freq.txt and produces required and bonus word lists
-for each source word, writing the result to assets/data/russian_levels.json.
+For each source word, produces required, bonus, too_common, and blocked word
+lists, writing the result to assets/data/russian_levels.json.
 
 Usage:
     py generate.py
 
-Word classification:
+Word quality gate:
+    The LibreOffice Russian hunspell dictionary is the primary source of truth
+    for what counts as a real Russian word. Only words that pass the hunspell
+    spell-checker are admitted. See docs/DECISIONS.md D12.
+
+    The frequency list (ru_freq.txt) serves as the iteration source AND the
+    frequency lookup. Iterating over the hunspell .dic directly would be the
+    architecturally purer choice, but it is not possible here: the .dic stores
+    full adjective forms (-ый/-ий) as base entries, whereas get_lemma() prefers
+    short forms (краткая форма) for aesthetic reasons — and short forms do not
+    appear in the .dic. The frequency list contains both full and short forms as
+    separate entries, so short-form adjectives are correctly seen and pass the
+    get_lemma(word) == word check. Hunspell acts as the quality gate on top of
+    the frequency list to reject non-words.
+
+Word classification (applied after the quality gate):
     required — in lemma form, formable from source letters,
                length <= MAX_REQUIRED_LENGTH, frequency >= FREQ_THRESHOLD
     bonus    — in lemma form, formable from source letters,
@@ -28,6 +43,7 @@ import os
 import re
 import sys
 from collections import namedtuple
+import enchant
 import pymorphy3
 
 # Ensure UTF-8 output on Windows
@@ -58,7 +74,8 @@ BLOCKLIST_FILE = os.path.join(SCRIPT_DIR, 'blocklist.txt')
 OUTPUT_FILE = os.path.join(REPO_ROOT, 'assets', 'data', 'russian_levels.json')
 
 # ---------------------------------------------------------------------------
-# Load frequency list
+# Load frequency list — used as the iteration source and frequency lookup.
+# Not treated as a word list; hunspell is the quality gate (see D12).
 # ---------------------------------------------------------------------------
 CYRILLIC = re.compile(r'^[а-яёА-ЯЁ]+$')
 
@@ -81,6 +98,8 @@ def load_freq(path):
 # Load blocklist — section-aware
 # ---------------------------------------------------------------------------
 # Blocklists is a namedtuple so both sets travel together as a single arg.
+# noise entries appear in the per-level "blocked" review output; profanity
+# entries are silently dropped and never surfaced to the player.
 Blocklists = namedtuple('Blocklists', ['noise', 'profanity'])
 
 def load_blocklist(path):
@@ -120,6 +139,22 @@ def can_form(word, source_counts):
         if source_counts.get(ch, 0) < n:
             return False
     return True
+
+# ---------------------------------------------------------------------------
+# Word quality gate — LibreOffice Russian hunspell dictionary
+#
+# The hunspell dictionary is the authoritative source of what constitutes a
+# real Russian word. It rejects ~76% of the words pymorphy3 would otherwise
+# accept via morphological prediction (fragments, loanword noise, letter
+# sequences that match Russian suffix patterns but are not real vocabulary).
+# The frequency list is used only to look up corpus counts for classification.
+# See docs/DECISIONS.md D12.
+#
+# Dictionary source: LibreOffice/dictionaries ru_RU
+# https://github.com/LibreOffice/dictionaries/tree/master/ru_RU
+# Licence: LGPL v3 / MPL 1.1 / GPL v3
+# ---------------------------------------------------------------------------
+hunspell = enchant.Dict('ru_RU')
 
 # ---------------------------------------------------------------------------
 # Lemmatization
@@ -185,6 +220,9 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
       len <= max_length AND freq_threshold <= count < max_freq → required
       otherwise                                             → bonus
 
+    Only words that pass the hunspell quality gate are considered. The
+    frequency list is used solely for corpus count lookup.
+
     blocked — words removed by the noise blocklist (not profanity). Included
     in the JSON output so curators can recover any real words mistakenly blocked.
     """
@@ -208,13 +246,20 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
         # Check formability first — cheap letter-count comparison.
         # Most words in the frequency list can't be formed from any given
         # source word, so this eliminates the vast majority before the
-        # expensive pymorphy3 call below.
+        # more expensive calls below.
         if not can_form(word, src_counts):
+            continue
+
+        # Hunspell quality gate — only admit words the Russian spell-checker
+        # recognises. Rejects ~76% of pymorphy3's morphological predictions
+        # (fragments, loanword noise, letter sequences matching Russian suffix
+        # patterns but not real vocabulary). See docs/DECISIONS.md D12.
+        if not hunspell.check(word):
             continue
 
         # Skip non-lemma forms — their lemma will appear in the frequency
         # list on its own and be processed then. This avoids duplicate entries
-        # without needing a seen-set. Done after formability check so pymorphy3
+        # without needing a seen-set. Done after the hunspell gate so pymorphy3
         # is only called on words that actually pass.
         if get_lemma(word) != word:
             continue
@@ -522,9 +567,8 @@ LEVELS = [
 def main():
     freq = load_freq(FREQ_FILE)
     blocklists = load_blocklist(BLOCKLIST_FILE)
-    total_blocked = len(blocklists.noise) + len(blocklists.profanity)
-    if total_blocked:
-        print(f"Loaded {len(blocklists.noise)} noise + {len(blocklists.profanity)} profanity blocklist entries.")
+    if blocklists.noise or blocklists.profanity:
+        print(f"Loaded {len(blocklists.noise)} noise + {len(blocklists.profanity)} profanity entries.")
     levels = []
 
     for level_fn in LEVELS:
