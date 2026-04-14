@@ -21,9 +21,10 @@ class WordSlotItem extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: List.generate(targetWord.length, (i) {
-          final isRevealed = targetWord.isFound;
-          final letter =
-              isRevealed ? targetWord.word[i].toUpperCase() : '';
+          final isFound = targetWord.isFound;
+          final isHinted = !isFound && targetWord.revealedIndices.contains(i);
+          final isRevealed = isFound || isHinted;
+          final letter = isRevealed ? targetWord.word[i].toUpperCase() : '';
 
           Widget slot = Container(
             width: 22,
@@ -32,9 +33,11 @@ class WordSlotItem extends StatelessWidget {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: isRevealed
+                  color: isFound
                       ? AppTheme.slotFilled
-                      : AppTheme.slotEmpty,
+                      : isHinted
+                          ? AppTheme.accent
+                          : AppTheme.slotEmpty,
                   width: 2,
                 ),
               ),
@@ -43,11 +46,12 @@ class WordSlotItem extends StatelessWidget {
               letter,
               style: AppTheme.condensedBold.copyWith(
                 fontSize: 13,
+                color: isHinted ? AppTheme.accent : null,
               ),
             ),
           );
 
-          if (justFound && isRevealed) {
+          if (justFound && isFound) {
             slot = slot
                 .animate(delay: (i * 50).ms)
                 .scale(

@@ -166,36 +166,46 @@ class GameProvider extends ChangeNotifier {
     final s = _state!;
     if (s.hintsRemaining <= 0) return;
 
-    final unfound = s.level.targetWords.cast<TargetWord?>().firstWhere(
-          (w) => !w!.isFound && !w.isBonus,
-          orElse: () => null,
-        );
-    if (unfound == null) return;
+    final unfoundRequired = s.level.targetWords
+        .where((w) => !w.isFound && !w.isBonus)
+        .toList();
+    if (unfoundRequired.isEmpty) return;
 
-    final hintLetter = unfound.word[0];
-    final hintTile =
-        s.level.sourceLetters.cast<LetterTile?>().firstWhere(
-              (t) => t!.letter == hintLetter && !t.isSelected,
-              orElse: () => null,
-            );
-    if (hintTile == null) return;
+    // Count total occurrences of each letter that hasn't been hinted yet
+    final letterCounts = <String, int>{};
+    for (final tw in unfoundRequired) {
+      for (final ch in tw.word.split('')) {
+        if ((s.hintedLetterCounts[ch] ?? 0) == 0) {
+          letterCounts[ch] = (letterCounts[ch] ?? 0) + 1;
+        }
+      }
+    }
+    if (letterCounts.isEmpty) return;
 
-    final newSelected = [...s.selectedTileIds, hintTile.id];
-    final newInput = newSelected
-        .map((id) =>
-            s.level.sourceLetters.firstWhere((t) => t.id == id).letter)
-        .join();
+    // Pick letter with most occurrences across unfound required words
+    final hintLetter = letterCounts.entries
+        .reduce((a, b) => a.value >= b.value ? a : b)
+        .key;
+
+    // Reveal ALL occurrences of hintLetter in each unfound required word
+    final updatedTargetWords = s.level.targetWords.map((tw) {
+      if (tw.isFound || tw.isBonus) return tw;
+      final newIndices = <int>{...tw.revealedIndices};
+      for (int i = 0; i < tw.word.length; i++) {
+        if (tw.word[i] == hintLetter) newIndices.add(i);
+      }
+      if (newIndices.length == tw.revealedIndices.length) return tw;
+      return tw.copyWith(revealedIndices: newIndices);
+    }).toList();
+
+    final newHintedLetterCounts =
+        Map<String, int>.from(s.hintedLetterCounts)
+          ..[hintLetter] = 1;
 
     _state = s.copyWith(
       hintsRemaining: s.hintsRemaining - 1,
-      selectedTileIds: newSelected,
-      currentInput: newInput,
-      level: s.level.copyWith(
-        sourceLetters: s.level.sourceLetters
-            .map((t) =>
-                t.id == hintTile.id ? t.copyWith(isSelected: true) : t)
-            .toList(),
-      ),
+      hintedLetterCounts: newHintedLetterCounts,
+      level: s.level.copyWith(targetWords: updatedTargetWords),
     );
     notifyListeners();
   }

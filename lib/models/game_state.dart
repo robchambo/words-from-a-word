@@ -24,19 +24,22 @@ class TargetWord {
   final int length;
   final bool isFound;
   final bool isBonus;
+  final Set<int> revealedIndices;
 
   const TargetWord({
     required this.word,
     required this.length,
     this.isFound = false,
     this.isBonus = false,
+    this.revealedIndices = const {},
   });
 
-  TargetWord copyWith({bool? isFound}) => TargetWord(
+  TargetWord copyWith({bool? isFound, Set<int>? revealedIndices}) => TargetWord(
         word: word,
         length: length,
         isFound: isFound ?? this.isFound,
         isBonus: isBonus,
+        revealedIndices: revealedIndices ?? this.revealedIndices,
       );
 }
 
@@ -81,6 +84,8 @@ class GameState {
   final bool isLevelComplete;
   final String? lastFoundWord;
 
+  final Map<String, int> hintedLetterCounts;
+
   const GameState({
     required this.level,
     this.selectedTileIds = const [],
@@ -91,6 +96,7 @@ class GameState {
     this.isShaking = false,
     this.isLevelComplete = false,
     this.lastFoundWord,
+    this.hintedLetterCounts = const {},
   });
 
   GameState copyWith({
@@ -104,6 +110,7 @@ class GameState {
     bool? isLevelComplete,
     String? lastFoundWord,
     bool clearLastFoundWord = false,
+    Map<String, int>? hintedLetterCounts,
   }) =>
       GameState(
         level: level ?? this.level,
@@ -116,5 +123,6 @@ class GameState {
         isLevelComplete: isLevelComplete ?? this.isLevelComplete,
         lastFoundWord:
             clearLastFoundWord ? null : (lastFoundWord ?? this.lastFoundWord),
+        hintedLetterCounts: hintedLetterCounts ?? this.hintedLetterCounts,
       );
 }

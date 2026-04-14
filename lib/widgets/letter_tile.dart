@@ -6,6 +6,7 @@ class LetterTileWidget extends StatelessWidget {
   final String letter;
   final bool isSelected;
   final bool isUsed;
+  final bool isHinted;
   final VoidCallback onTap;
 
   const LetterTileWidget({
@@ -14,6 +15,7 @@ class LetterTileWidget extends StatelessWidget {
     required this.isSelected,
     required this.isUsed,
     required this.onTap,
+    this.isHinted = false,
   });
 
   @override
@@ -39,8 +41,10 @@ class LetterTileWidget extends StatelessWidget {
             border: Border.all(
               color: isSelected
                   ? AppTheme.primary.withValues(alpha: 0.7)
-                  : AppTheme.border.withValues(alpha: 0.6),
-              width: 1,
+                  : isHinted
+                      ? AppTheme.accent.withValues(alpha: 0.8)
+                      : AppTheme.border.withValues(alpha: 0.6),
+              width: isHinted ? 2 : 1,
             ),
             boxShadow: [
               BoxShadow(
