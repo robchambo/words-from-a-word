@@ -29,8 +29,8 @@ class WordSlots extends StatelessWidget {
     }
     final sortedLengths = grouped.keys.toList()..sort();
 
-    // Bonus words
-    final bonusWords = targetWords.where((w) => w.isBonus).toList();
+    // Only show bonus words the player has already found
+    final bonusWords = targetWords.where((w) => w.isBonus && w.isFound).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

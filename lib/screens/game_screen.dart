@@ -112,7 +112,7 @@ class GameScreen extends StatelessWidget {
                   ),
 
                   // Celebration + hint row
-                  _buildStatusRow(state, isRu),
+                  _buildStatusRow(context, state, isRu),
 
                   // Tile picker
                   Container(
@@ -225,7 +225,7 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusRow(dynamic state, bool isRu) {
+  Widget _buildStatusRow(BuildContext context, dynamic state, bool isRu) {
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -251,9 +251,7 @@ class GameScreen extends StatelessWidget {
           // Hint button
           GestureDetector(
             onTap: state.hintsRemaining > 0
-                ? () {
-                    // Access via context is not available here, hint is triggered from provider
-                  }
+                ? () => context.read<GameProvider>().useHint()
                 : null,
             child: Text(
               '💡 ${isRu ? StringsRu.hintButton : StringsEn.hintButton} ×${state.hintsRemaining}',
