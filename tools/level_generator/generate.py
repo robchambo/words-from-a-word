@@ -186,7 +186,15 @@ def get_lemma(word):
     if not parsed:
         return word
 
+    # If the top parse is an abbreviation but a real-word parse also exists,
+    # prefer the first non-abbreviation parse. This handles words like "род"
+    # where pymorphy3 ranks an Abbr/verb parse above the common noun parse.
     p = parsed[0]
+    if 'Abbr' in p.tag.grammemes:
+        real = [x for x in parsed if 'Abbr' not in x.tag.grammemes and 'UNKN' not in x.tag.grammemes]
+        if real:
+            p = real[0]
+
     pos = p.tag.POS
 
     if pos == 'NOUN':
