@@ -6,6 +6,21 @@ import '../models/game_state.dart';
 import '../models/language_mode.dart';
 import 'game_engine.dart';
 
+LevelDifficulty _parseDifficulty(String? value) {
+  switch (value) {
+    case 'easy':
+      return LevelDifficulty.easy;
+    case 'medium':
+      return LevelDifficulty.medium;
+    case 'hard':
+      return LevelDifficulty.hard;
+    case 'expert':
+      return LevelDifficulty.expert;
+    default:
+      return LevelDifficulty.beginner;
+  }
+}
+
 class LevelLoader {
   static List<Map<String, dynamic>>? _russianDefs;
   static List<Map<String, dynamic>>? _englishDefs;
@@ -58,12 +73,13 @@ class LevelLoader {
     }).toList();
 
     return GameLevel(
-      id: levelNumber,
+      levelNumber: (def['levelNumber'] as int?) ?? levelNumber,
       sourceWord: sourceWord,
       sourceLetters: sourceLetters,
       targetWords: targetWords,
       tooCommon: tooCommon,
       totalWords: required.length,
+      difficulty: _parseDifficulty(def['difficulty'] as String?),
     );
   }
 }

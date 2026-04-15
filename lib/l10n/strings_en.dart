@@ -1,3 +1,5 @@
+import '../models/game_state.dart';
+
 class StringsEn {
   // Home screen
   static const String appTitle = 'Words from a Word';
@@ -28,6 +30,21 @@ class StringsEn {
   static const String selectLetters = 'Select letters';
   static const String bonusLabel = 'Bonus';
   static const String tooCommonWord = 'Word is too common!';
+
+  static String difficultyLabel(LevelDifficulty d) {
+    switch (d) {
+      case LevelDifficulty.beginner:
+        return 'BEGINNER';
+      case LevelDifficulty.easy:
+        return 'EASY';
+      case LevelDifficulty.medium:
+        return 'MEDIUM';
+      case LevelDifficulty.hard:
+        return 'HARD';
+      case LevelDifficulty.expert:
+        return 'EXPERT';
+    }
+  }
 
   static String lettersHeader(int n) => '$n LETTERS';
 

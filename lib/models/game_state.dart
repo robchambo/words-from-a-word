@@ -1,3 +1,5 @@
+enum LevelDifficulty { beginner, easy, medium, hard, expert }
+
 class LetterTile {
   final String id;
   final String letter;
@@ -44,20 +46,22 @@ class TargetWord {
 }
 
 class GameLevel {
-  final int id;
+  final int levelNumber;  // Within-difficulty position (1-based); shown in the stamp.
   final String sourceWord;
   final List<LetterTile> sourceLetters;
   final List<TargetWord> targetWords;
   final List<String> tooCommon;
   final int totalWords;
+  final LevelDifficulty difficulty;
 
   const GameLevel({
-    required this.id,
+    required this.levelNumber,
     required this.sourceWord,
     required this.sourceLetters,
     required this.targetWords,
     required this.totalWords,
     this.tooCommon = const [],
+    this.difficulty = LevelDifficulty.easy,
   });
 
   GameLevel copyWith({
@@ -65,12 +69,13 @@ class GameLevel {
     List<TargetWord>? targetWords,
   }) =>
       GameLevel(
-        id: id,
+        levelNumber: levelNumber,
         sourceWord: sourceWord,
         sourceLetters: sourceLetters ?? this.sourceLetters,
         targetWords: targetWords ?? this.targetWords,
         totalWords: totalWords,
         tooCommon: tooCommon,
+        difficulty: difficulty,
       );
 }
 

@@ -50,19 +50,44 @@ import pymorphy3
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # ---------------------------------------------------------------------------
-# Default thresholds — global fallbacks used when a level does not override.
-# All four can be set per level via generate_level()'s keyword arguments:
-#   min_length, max_length, freq_threshold, max_freq
-#
-# Classification (in order of precedence):
-#   count >= MAX_FREQ                               → too_common
-#   len <= MAX_REQUIRED_LENGTH AND count >= FREQ_THRESHOLD → required
-#   otherwise                                       → bonus
+# Hard floor — minimum word length, applied to every level regardless of profile.
 # ---------------------------------------------------------------------------
 MIN_WORD_LENGTH = 3          # shortest word to include
-MAX_REQUIRED_LENGTH = 5      # words longer than this go to bonus
-FREQ_THRESHOLD = 1000        # words below this frequency go to bonus
-MAX_FREQ = 50000             # words at or above this frequency go to too_common
+
+# ---------------------------------------------------------------------------
+# Difficulty profiles — five standard configurations targeting ~10 required
+# words per level. Each level picks the profile that gives it the closest
+# count to 10 required words, verified by threshold analysis across all 23
+# source words.
+#
+#   Profile        ft      mf      ml    Notes
+#   P1_BEGINNER  5000   20000     4     Short, very common words only
+#   P2_EASY      2000   10000     5     Common vocabulary, up to 5 letters
+#   P3_MEDIUM    1000   20000     5     Broader common words, up to 5 letters
+#   P4_HARD       500   10000     6     Rarer words, up to 6 letters
+#   P5_EXPERT     200    5000     6     Rare/literary vocabulary, up to 6 letters
+#
+# ft = freq_threshold: words below this go to bonus
+# mf = max_freq:       words at or above this go to too_common
+# ml = max_length:     words longer than this go to bonus
+# ---------------------------------------------------------------------------
+PROFILES = {
+    'P1_BEGINNER': {'freq_threshold': 5000, 'max_freq': 20000, 'max_length': 4},
+    'P2_EASY':     {'freq_threshold': 2000, 'max_freq': 10000, 'max_length': 5},
+    'P3_MEDIUM':   {'freq_threshold': 1000, 'max_freq': 20000, 'max_length': 5},
+    'P4_HARD':     {'freq_threshold':  500, 'max_freq': 10000, 'max_length': 6},
+    'P5_EXPERT':   {'freq_threshold':  200, 'max_freq':  5000, 'max_length': 6},
+}
+
+# Maps profile name → difficulty string written to the level JSON.
+# These strings are parsed by LevelLoader in the Flutter app.
+PROFILE_DIFFICULTY = {
+    'P1_BEGINNER': 'beginner',
+    'P2_EASY':     'easy',
+    'P3_MEDIUM':   'medium',
+    'P4_HARD':     'hard',
+    'P5_EXPERT':   'expert',
+}
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -218,10 +243,12 @@ def get_lemma(word):
 # Core generator — shared by all per-level functions
 # ---------------------------------------------------------------------------
 def generate_level(source_word, freq, overrides_excluded, blocklists,
-                   min_length=None, max_length=None, freq_threshold=None, max_freq=None):
+                   min_length=MIN_WORD_LENGTH, max_length=5, freq_threshold=1000, max_freq=20000):
     """
-    Per-level overrides for classification thresholds.
-    All default to the global constants when not specified.
+    Generates word lists for a level. Always call with a difficulty profile:
+        generate_level(..., **PROFILES['P2_EASY'])
+    The default parameter values match P3_MEDIUM and exist only as a safety
+    net — in practice every level function passes an explicit profile.
 
     Classification order:
       count >= max_freq                                     → too_common
@@ -237,10 +264,10 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
     src = source_word.lower()
     src_counts = letter_counts(src)
     excluded = {w.lower() for w in overrides_excluded}
-    min_len   = min_length     if min_length     is not None else MIN_WORD_LENGTH
-    max_len   = max_length     if max_length     is not None else MAX_REQUIRED_LENGTH
-    threshold = freq_threshold if freq_threshold is not None else FREQ_THRESHOLD
-    max_f     = max_freq       if max_freq       is not None else MAX_FREQ
+    min_len   = min_length
+    max_len   = max_length
+    threshold = freq_threshold
+    max_f     = max_freq
 
     required = []
     bonus = []
@@ -313,260 +340,338 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
     return required, bonus, too_common, blocked
 
 # ---------------------------------------------------------------------------
-# Per-level functions
-# Each function returns a dict ready to be appended to the levels list.
-# To add a level: copy the template, increment the index, set source_word,
-# and optionally populate overrides_excluded.
+# Per-level functions — named level_{tier}_{index} where tier is the
+# difficulty number (1=beginner … 5=expert) and index restarts at 1 per tier.
+# Each returns a dict with "sourceWord", "profile", and word lists.
+# main() stamps "difficulty" and "levelNumber" onto each entry automatically.
+# To add a level: copy a template, give it the next index for its tier,
+# set source_word and profile_name, and optionally populate overrides_excluded.
 # ---------------------------------------------------------------------------
 
-def level_01(freq, blocklists):
-    # переводчик
-    source_word = "переводчик"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
+# --- Tier 1: P1_BEGINNER ---
 
-def level_02(freq, blocklists):
-    # строитель
+def level_1_1(freq, blocklists):
+    # строитель — P1_BEGINNER (~6 required)
     source_word = "строитель"
+    profile_name = 'P1_BEGINNER'
     overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
     if overrides_excluded:
         entry["overrides"] = {"excluded": overrides_excluded}
     return entry
 
-def level_03(freq, blocklists):
-    # государство
+def level_1_2(freq, blocklists):
+    # государство — P1_BEGINNER (~7 required)
     source_word = "государство"
+    profile_name = 'P1_BEGINNER'
     overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_04(freq, blocklists):
-    # воспитание
-    source_word = "воспитание"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_05(freq, blocklists):
-    # достижение
-    source_word = "достижение"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_06(freq, blocklists):
-    # образование
-    source_word = "образование"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_07(freq, blocklists):
-    # расстояние
-    source_word = "расстояние"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_08(freq, blocklists):
-    # направление
-    source_word = "направление"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_09(freq, blocklists):
-    # библиотека
-    source_word = "библиотека"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_10(freq, blocklists):
-    # правительство
-    source_word = "правительство"
-    overrides_excluded = []
-    # Lower max_freq: this source word yields far too many required words at the
-    # global threshold. Lowering max_freq moves more medium-high words to too_common.
     required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
-                                                          max_freq=5000)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
     if overrides_excluded:
         entry["overrides"] = {"excluded": overrides_excluded}
     return entry
 
-def level_11(freq, blocklists):
-    # картошка
-    source_word = "картошка"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_12(freq, blocklists):
-    # комсомолец
-    source_word = "комсомолец"
-    overrides_excluded = []
-    # Lower freq_threshold: formable vocabulary skews less frequent than the global default.
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
-                                                          freq_threshold=200)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_13(freq, blocklists):
-    # телевизор
-    source_word = "телевизор"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_14(freq, blocklists):
-    # холодильник
-    source_word = "холодильник"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_15(freq, blocklists):
-    # университет
-    source_word = "университет"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_16(freq, blocklists):
-    # литература
-    source_word = "литература"
-    overrides_excluded = []
-    # Lower freq_threshold: formable vocabulary skews less frequent than the global default.
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
-                                                          freq_threshold=200)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_17(freq, blocklists):
-    # архитектура
-    source_word = "архитектура"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_18(freq, blocklists):
-    # математика
-    source_word = "математика"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_19(freq, blocklists):
-    # территория
-    source_word = "территория"
-    overrides_excluded = []
-    # Lower freq_threshold: formable vocabulary skews less frequent than the global default.
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
-                                                          freq_threshold=200)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_20(freq, blocklists):
-    # сотрудник
-    source_word = "сотрудник"
-    overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
-    if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
-    return entry
-
-def level_21(freq, blocklists):
-    # воображение
+def level_1_3(freq, blocklists):
+    # воображение — P1_BEGINNER (~7 required)
     source_word = "воображение"
+    profile_name = 'P1_BEGINNER'
     overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
     if overrides_excluded:
         entry["overrides"] = {"excluded": overrides_excluded}
     return entry
 
-def level_22(freq, blocklists):
-    # произведение
+def level_1_4(freq, blocklists):
+    # воспитание — P1_BEGINNER (~9 required)
+    source_word = "воспитание"
+    profile_name = 'P1_BEGINNER'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_1_5(freq, blocklists):
+    # сотрудник — P1_BEGINNER (~12 required)
+    source_word = "сотрудник"
+    profile_name = 'P1_BEGINNER'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_1_6(freq, blocklists):
+    # правительство — TODO: needs a replacement source word.
+    # No profile gives fewer than 14 required words; letters form too many common words.
+    # Temporary: P1_BEGINNER to minimise the excess.
+    source_word = "правительство"
+    profile_name = 'P1_BEGINNER'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+# --- Tier 2: P2_EASY ---
+
+def level_2_1(freq, blocklists):
+    # достижение — P2_EASY (~7 required)
+    source_word = "достижение"
+    profile_name = 'P2_EASY'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_2_2(freq, blocklists):
+    # архитектура — P2_EASY (~7 required)
+    source_word = "архитектура"
+    profile_name = 'P2_EASY'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_2_3(freq, blocklists):
+    # библиотека — P2_EASY (~8 required)
+    source_word = "библиотека"
+    profile_name = 'P2_EASY'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_2_4(freq, blocklists):
+    # холодильник — P2_EASY (~8 required)
+    source_word = "холодильник"
+    profile_name = 'P2_EASY'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_2_5(freq, blocklists):
+    # университет — P2_EASY (~9 required)
+    source_word = "университет"
+    profile_name = 'P2_EASY'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_2_6(freq, blocklists):
+    # расстояние — P2_EASY (~10 required)
+    source_word = "расстояние"
+    profile_name = 'P2_EASY'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_2_7(freq, blocklists):
+    # переводчик — P2_EASY (~11 required)
+    source_word = "переводчик"
+    profile_name = 'P2_EASY'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_2_8(freq, blocklists):
+    # образование — P2_EASY (~13 required)
+    source_word = "образование"
+    profile_name = 'P2_EASY'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_2_9(freq, blocklists):
+    # произведение — P2_EASY (~13 required)
     source_word = "произведение"
+    profile_name = 'P2_EASY'
     overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
     if overrides_excluded:
         entry["overrides"] = {"excluded": overrides_excluded}
     return entry
 
-def level_23(freq, blocklists):
-    # приключение
-    source_word = "приключение"
+# --- Tier 3: P3_MEDIUM ---
+
+def level_3_1(freq, blocklists):
+    # телевизор — P3_MEDIUM (~8 required)
+    source_word = "телевизор"
+    profile_name = 'P3_MEDIUM'
     overrides_excluded = []
-    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists)
-    entry = {"sourceWord": source_word, "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_3_2(freq, blocklists):
+    # приключение — P3_MEDIUM (~9 required)
+    source_word = "приключение"
+    profile_name = 'P3_MEDIUM'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_3_3(freq, blocklists):
+    # картошка — P3_MEDIUM (~11 required)
+    source_word = "картошка"
+    profile_name = 'P3_MEDIUM'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_3_4(freq, blocklists):
+    # направление — P3_MEDIUM (~12 required)
+    source_word = "направление"
+    profile_name = 'P3_MEDIUM'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+# --- Tier 4: P4_HARD ---
+
+def level_4_1(freq, blocklists):
+    # литература — P4_HARD (~9 required)
+    source_word = "литература"
+    profile_name = 'P4_HARD'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_4_2(freq, blocklists):
+    # комсомолец — P4_HARD (~10 required)
+    source_word = "комсомолец"
+    profile_name = 'P4_HARD'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+# --- Tier 5: P5_EXPERT ---
+
+def level_5_1(freq, blocklists):
+    # математика — P5_EXPERT (~12 required)
+    source_word = "математика"
+    profile_name = 'P5_EXPERT'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
+    if overrides_excluded:
+        entry["overrides"] = {"excluded": overrides_excluded}
+    return entry
+
+def level_5_2(freq, blocklists):
+    # территория — TODO: needs a replacement source word.
+    # Max 5 required at any profile due to limited formable vocabulary.
+    # Temporary: P5_EXPERT to surface as many words as possible.
+    source_word = "территория"
+    profile_name = 'P5_EXPERT'
+    overrides_excluded = []
+    required, bonus, too_common, blocked = generate_level(source_word, freq, overrides_excluded, blocklists,
+                                                          **PROFILES[profile_name])
+    entry = {"sourceWord": source_word, "profile": profile_name,
+             "required": required, "bonus": bonus, "tooCommon": too_common, "blocked": blocked}
     if overrides_excluded:
         entry["overrides"] = {"excluded": overrides_excluded}
     return entry
 
 # ---------------------------------------------------------------------------
-# Level registry — add new level functions here in order
+# Level registry — add new functions above and list them here in play order.
+# main() assigns "difficulty" and "levelNumber" automatically from "profile".
 # ---------------------------------------------------------------------------
 LEVELS = [
-    level_01, level_02, level_03, level_04, level_05,
-    level_06, level_07, level_08, level_09, level_10,
-    level_11, level_12, level_13, level_14, level_15,
-    level_16, level_17, level_18, level_19, level_20,
-    level_21, level_22, level_23,
+    level_1_1, level_1_2, level_1_3, level_1_4, level_1_5, level_1_6,
+    level_2_1, level_2_2, level_2_3, level_2_4, level_2_5,
+    level_2_6, level_2_7, level_2_8, level_2_9,
+    level_3_1, level_3_2, level_3_3, level_3_4,
+    level_4_1, level_4_2,
+    level_5_1, level_5_2,
 ]
 
 # ---------------------------------------------------------------------------
@@ -579,14 +684,21 @@ def main():
         print(f"Loaded {len(blocklists.noise)} noise + {len(blocklists.profanity)} profanity entries.")
     levels = []
 
+    difficulty_counters: dict[str, int] = {}
     for level_fn in LEVELS:
         entry = level_fn(freq, blocklists)
+        profile_name = entry.pop("profile")
+        difficulty = PROFILE_DIFFICULTY[profile_name]
+        difficulty_counters[difficulty] = difficulty_counters.get(difficulty, 0) + 1
+        entry["difficulty"] = difficulty
+        entry["levelNumber"] = difficulty_counters[difficulty]
+
         source_word = entry["sourceWord"]
         required_count = len(entry["required"])
         bonus_count = len(entry["bonus"])
         too_common_count = len(entry["tooCommon"])
-        print(f"Generating: {source_word} ({len(source_word)} letters)...")
         blocked_count = len(entry["blocked"])
+        print(f"Generating: {source_word} ({len(source_word)} letters)  [{difficulty} #{difficulty_counters[difficulty]}]...")
         print(f"  required: {required_count}, bonus: {bonus_count}, too_common: {too_common_count}, blocked: {blocked_count}")
         levels.append(entry)
 

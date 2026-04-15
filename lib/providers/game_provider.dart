@@ -13,12 +13,15 @@ class GameProvider extends ChangeNotifier {
   GameState get state => _state!;
   bool get isReady => _state != null;
 
+  int _currentLevelIndex = 1; // Global 1-based position in the level array.
+
   Timer? _shakeTimer;
   Timer? _lastFoundTimer;
   Timer? _tooCommonTimer;
 
   Future<void> startGame(LanguageMode mode, {int levelNumber = 1}) async {
-    final level = LevelLoader.generateLevel(levelNumber, mode);
+    _currentLevelIndex = levelNumber;
+    final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
     _state = GameState(level: level);
     notifyListeners();
   }
@@ -237,8 +240,8 @@ class GameProvider extends ChangeNotifier {
   void nextLevel(LanguageMode mode) {
     final savedScore = _state!.score;
     final savedHints = _state!.hintsRemaining;
-    final nextLevelNum = _state!.level.id + 1;
-    final level = LevelLoader.generateLevel(nextLevelNum, mode);
+    _currentLevelIndex++;
+    final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
     _state = GameState(
       level: level,
       score: savedScore,

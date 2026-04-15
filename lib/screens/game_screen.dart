@@ -159,11 +159,26 @@ class GameScreen extends StatelessWidget {
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
 
-          // Level stamp
-          StampBadge(
-            text:
-                '${isRu ? StringsRu.levelLabel : StringsEn.levelLabel}\n${state.level.id}',
-            size: 44,
+          // Level stamp + difficulty
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              StampBadge(
+                text:
+                    '${isRu ? StringsRu.levelLabel : StringsEn.levelLabel}\n${state.level.levelNumber}',
+                size: 44,
+              ),
+              Text(
+                isRu
+                    ? StringsRu.difficultyLabel(state.level.difficulty)
+                    : StringsEn.difficultyLabel(state.level.difficulty),
+                style: AppTheme.condensedLabel.copyWith(
+                  fontSize: 8,
+                  color: AppTheme.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: 8),
 

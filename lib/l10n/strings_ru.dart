@@ -1,3 +1,5 @@
+import '../models/game_state.dart';
+
 class StringsRu {
   // Home screen
   static const String appTitle = 'Слова из Слова';
@@ -33,6 +35,21 @@ class StringsRu {
     if (n == 1) return '1 БУКВА';
     if (n >= 2 && n <= 4) return '$n БУКВЫ';
     return '$n БУКВ';
+  }
+
+  static String difficultyLabel(LevelDifficulty d) {
+    switch (d) {
+      case LevelDifficulty.beginner:
+        return 'НАЧИНАЮЩИЙ';
+      case LevelDifficulty.easy:
+        return 'ЛЁГКИЙ';
+      case LevelDifficulty.medium:
+        return 'СРЕДНИЙ';
+      case LevelDifficulty.hard:
+        return 'СЛОЖНЫЙ';
+      case LevelDifficulty.expert:
+        return 'ЭКСПЕРТ';
+    }
   }
 
   // Rules modal

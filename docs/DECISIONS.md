@@ -94,9 +94,9 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 
 **Why:** Hand-curated word lists miss valid words (e.g. "род" in level 1), require ongoing maintenance, and don't scale to 50+ levels. A frequency-ranked dictionary gives players a consistent and fair experience while keeping common words as required targets and rare/long words as rewarding discoveries.
 
-**Thresholds:** All four thresholds (`MIN_WORD_LENGTH` = 3, `MAX_REQUIRED_LENGTH` = 5, `FREQ_THRESHOLD` = 1000, `MAX_FREQ` = 50000) are global constants in `generate.py` and can be overridden per level by passing keyword arguments to `generate_level()`.
+**Thresholds:** `MIN_WORD_LENGTH` = 3 is the only global constant — a hard floor applied to all levels. All other classification thresholds (`max_length`, `freq_threshold`, `max_freq`) are set exclusively via the named difficulty profiles defined in `generate.py`. See D13.
 
-**Source word selection:** Source words (12+ letters) are chosen manually to ensure levels are interesting and consistent across users. A pool of 50 initial source words will be selected, spanning high, medium, and low frequency.
+**Source word selection:** Source words are chosen manually. Length is not fixed — current levels range from 8 to 13 letters. The selection criterion is vocabulary density: the source word should yield ~8–12 required words under the chosen difficulty profile. Words that yield too few or too many required words at any profile need replacing (see D13).
 
 **Note on implementation:** Initially implemented as runtime classification via `engine/dictionary.dart`. Subsequently moved to an offline generator (`tools/level_generator/generate.py`) that writes pre-computed `required`, `bonus`, and `tooCommon` arrays into the level JSON — see D11. `engine/dictionary.dart` and the `ru_freq.txt` Flutter asset were removed once the generator took over all word classification.
 
@@ -130,3 +130,103 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 **Dictionary source:** LibreOffice/dictionaries `ru_RU`, available at `https://github.com/LibreOffice/dictionaries/tree/master/ru_RU`. Licence: LGPL v3 / MPL 1.1 / GPL v3. The `.dic` and `.aff` files are installed locally via pyenchant and are not bundled in this repository.
 
 **Impact:** The `blocklist.txt` noise section shrank from ~50 entries with 3 programmatic RULE directives to 6 manually curated entries covering only the residual cases hunspell cannot distinguish from real vocabulary. The profanity section shrank from 30 entries to 6 (the remainder are rejected by hunspell directly).
+
+---
+
+## D13 — Five difficulty profiles for required-word count targeting (refines D10)
+
+**Decision:** Five named difficulty profiles replace ad-hoc per-level threshold overrides. Each profile is a fixed combination of `freq_threshold` (ft), `max_freq` (mf), and `max_length` (ml):
+
+| Profile | ft | mf | ml | Notes |
+|---|---|---|---|---|
+| P1_BEGINNER | 5000 | 20000 | 4 | Short, very common words only |
+| P2_EASY | 2000 | 10000 | 5 | Common vocabulary, up to 5 letters |
+| P3_MEDIUM | 1000 | 20000 | 5 | Broader common words, up to 5 letters |
+| P4_HARD | 500 | 10000 | 6 | Rarer words, up to 6 letters |
+| P5_EXPERT | 200 | 5000 | 6 | Rare/literary vocabulary, up to 6 letters |
+
+Each level function is assigned to the profile that gives it the closest required-word count to 10, verified by threshold analysis across all 23 source words. Target range is 8–12 required words.
+
+**Why:** No single threshold set produces ~10 required words for every source word — vocabulary density varies too much between them. Named profiles make assignments legible (each level function comments its profile and expected count) and make future source word selection principled: generate a candidate at all 5 profiles, pick the source word whose profile gives the desired difficulty, assign that profile.
+
+**Source words needing replacement:** Two levels cannot reach 8–12 required words at any profile: `правительство` (minimum ~14 at P1_BEGINNER — letters form too many common words) and `территория` (maximum ~5 at P5_EXPERT — insufficient formable vocabulary). Both are flagged with TODO comments in `generate.py` and use a temporary profile pending replacement.
+
+**Impact:** `PROFILES` dict added to `generate.py`. All 23 level functions call `generate_level(..., **PROFILES['Pn_NAME'])`. Previous ad-hoc overrides (`max_freq=5000` on level 10, `freq_threshold=200` on levels 12, 16, 19) replaced with the appropriate profile calls. `MIN_WORD_LENGTH` = 3 remains the only global threshold constant; all other threshold parameters are now set exclusively through profiles.
+
+---
+
+## D14 — Replication guide: building an English generator with the same constraints *(TODO — remove once English generator is built and english_levels.json is regenerated)*
+
+**Context:** The current `tools/level_generator/generate.py` is Russian-only (uses pymorphy3 for morphology and the hermitdave Russian frequency list). The 20 English levels in `assets/data/english_levels.json` are hand-crafted (see D7). This entry documents how to build a generator-based English equivalent following the same architecture and constraints. **Delete this entry once the English generator exists and `english_levels.json` is produced by it.**
+
+**Step 1 — English frequency list**
+
+Download the hermitdave English frequency list (same project, same MIT licence):
+
+```
+https://github.com/hermitdave/FrequencyWords/blob/master/content/2018/en/en_50k.txt
+```
+
+Place at `assets/data/en_freq.txt`. Format is identical to `ru_freq.txt`: one `word count` pair per line. Load with the existing `load_freq()` function (no changes needed).
+
+**Step 2 — English morphology (replaces pymorphy3)**
+
+pymorphy3 is Russian-only. For English lemmatization install two packages:
+
+```
+pip install nltk lemminflect
+```
+
+Then bootstrap NLTK once:
+
+```python
+import nltk
+nltk.download('wordnet')
+nltk.download('averaged_perceptron_tagger_eng')
+```
+
+Replace the Russian `get_lemma()` function with an English equivalent:
+
+```python
+from nltk.stem import WordNetLemmatizer
+from nltk import pos_tag
+
+_lemmatizer = WordNetLemmatizer()
+
+_POS_MAP = {'NN': 'n', 'VB': 'v', 'JJ': 'a', 'RB': 'r'}
+
+def get_lemma_en(word):
+    """Return the lemma of word, or None if it is not in base/lemma form."""
+    tag = pos_tag([word])[0][1][:2]
+    pos = _POS_MAP.get(tag, 'n')
+    lemma = _lemmatizer.lemmatize(word.lower(), pos)
+    return lemma if lemma == word.lower() else None
+```
+
+**Step 3 — English hunspell dictionary**
+
+Install the LibreOffice en_US dictionary via pyenchant:
+
+```
+pip install pyenchant
+```
+
+pyenchant ships `en_US` by default on most systems. If not, download `en_US.dic` and `en_US.aff` from `https://github.com/LibreOffice/dictionaries/tree/master/en` and point pyenchant at them. Replace `enchant.Dict('ru_RU')` with `enchant.Dict('en_US')` in the generator.
+
+**Step 4 — Adapting generate_level() for English**
+
+The classification logic, PROFILES, PROFILE_DIFFICULTY, and canFormWord() are all language-agnostic — carry them over unchanged. The only changes to `generate_level()` are:
+
+1. Replace `morph.parse(word)[0]` with the English lemmatizer call
+2. Remove the Russian-specific proper noun / preposition tag filters; replace with English equivalents (NLTK tags `NNP`/`NNPS` for proper nouns; `IN` for prepositions)
+3. The `get_lemma(word) == word` guard (keeps only base forms) works the same way
+
+**Step 5 — Profile calibration for English**
+
+Run the 5 profiles against candidate source words and record required-word counts. English vocabulary density differs from Russian — the P1–P5 thresholds may need recalibrating. The same methodology applies: pick the profile that puts a source word in the 8–12 required word target range. Recalibrate by adjusting `freq_threshold` / `max_freq` / `max_length` until the distribution looks right across a sample of 10+ source words.
+
+**Step 6 — Level function naming and output**
+
+Level function names follow the same `level_{tier}_{index}` convention. The `main()` function is unchanged — it stamps `difficulty` and `levelNumber` from `profile` automatically. Set `OUTPUT_FILE` to `assets/data/english_levels.json`.
+
+**Note on existing English levels:** `assets/data/english_levels.json` currently contains 20 hand-crafted levels (see D7). Running the English generator will overwrite this file. Retain a backup or migrate the hand-crafted source words into generator-style level functions before running.
