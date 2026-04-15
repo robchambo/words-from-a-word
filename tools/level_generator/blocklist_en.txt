@@ -1,0 +1,16 @@
+# English noise + profanity blocklist for the English level generator.
+#
+# Section 1 entries are tracked in each level's "blocked" array so a curator
+# can review them and recover any real word mistakenly blocked.
+# Section 2 entries are silently dropped and never surfaced to the player.
+#
+# Add one lowercase word per line. Lines starting with # are comments.
+
+# === SECTION 1: NOISE ===
+# Real-looking strings the hunspell dictionary admits but that don't belong
+# in the game (abbreviations, fragments, misleading entries).
+
+
+# === SECTION 2: PROFANITY ===
+# Words excluded for content reasons.
+

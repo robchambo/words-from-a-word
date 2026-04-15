@@ -38,4 +38,3 @@ flutter:
   assets:
     - assets/data/russian_levels.json
     - assets/data/english_levels.json
-    - assets/data/ru_freq.txt

@@ -46,8 +46,8 @@ from collections import namedtuple
 import enchant
 import pymorphy3
 
-# Ensure UTF-8 output on Windows
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# UTF-8 stdout wrap is applied inside main() so importing this module
+# (e.g. from tests) does not clobber sys.stdout.
 
 # ---------------------------------------------------------------------------
 # Hard floor — minimum word length, applied to every level regardless of profile.
@@ -94,7 +94,7 @@ PROFILE_DIFFICULTY = {
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.join(SCRIPT_DIR, '..', '..')
-FREQ_FILE = os.path.join(REPO_ROOT, 'assets', 'data', 'ru_freq.txt')
+FREQ_FILE = os.path.join(SCRIPT_DIR, 'ru_freq.txt')
 BLOCKLIST_FILE = os.path.join(SCRIPT_DIR, 'blocklist.txt')
 OUTPUT_FILE = os.path.join(REPO_ROOT, 'assets', 'data', 'russian_levels.json')
 
@@ -678,6 +678,8 @@ LEVELS = [
 # Main
 # ---------------------------------------------------------------------------
 def main():
+    # Ensure UTF-8 output on Windows.
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     freq = load_freq(FREQ_FILE)
     blocklists = load_blocklist(BLOCKLIST_FILE)
     if blocklists.noise or blocklists.profanity:
