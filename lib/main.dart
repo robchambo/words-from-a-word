@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import 'engine/dictionary.dart';
 import 'engine/level_loader.dart';
 import 'providers/settings_provider.dart';
 import 'providers/game_provider.dart';
@@ -16,7 +15,6 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  await Dictionary.preload();
   await LevelLoader.preload();
 
   final settings = SettingsProvider();
