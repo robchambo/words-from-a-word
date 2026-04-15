@@ -1,7 +1,7 @@
 name: slova_iz_slova
 description: Russian/English word game for the US diaspora
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0-beta.1+2
 
 environment:
   sdk: ^3.11.3
@@ -31,6 +31,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
 
 flutter:
   uses-material-design: true
@@ -38,3 +39,13 @@ flutter:
   assets:
     - assets/data/russian_levels.json
     - assets/data/english_levels.json
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+  # Adaptive icon: foreground is the source image, background is cream
+  # matching the Soviet-notebook page colour (AppTheme.background).
+  adaptive_icon_background: "#FFFEF0"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+  min_sdk_android: 21

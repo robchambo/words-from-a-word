@@ -3,6 +3,10 @@
 *.log
 *.pyc
 *.swp
+
+# Android release signing — keep out of VCS
+android/key.properties
+android/upload-keystore.jks
 .DS_Store
 .atom/
 .build/
