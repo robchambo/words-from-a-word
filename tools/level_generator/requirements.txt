@@ -3,7 +3,6 @@ pymorphy3==2.0.4
 
 # English generator
 nltk==3.9.1
-lemminflect==0.2.3
 
 # Both
 pyenchant==3.3.0rc1

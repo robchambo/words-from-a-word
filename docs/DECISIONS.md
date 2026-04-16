@@ -155,78 +155,44 @@ Each level function is assigned to the profile that gives it the closest require
 
 ---
 
-## D14 — Replication guide: building an English generator with the same constraints *(TODO — remove once English generator is built and english_levels.json is regenerated)*
+## D14 — Language-specific generator decisions (Russian: pymorphy3; English: NLTK + WordNet)
 
-**Context:** The current `tools/level_generator/generate.py` is Russian-only (uses pymorphy3 for morphology and the hermitdave Russian frequency list). The 20 English levels in `assets/data/english_levels.json` are hand-crafted (see D7). This entry documents how to build a generator-based English equivalent following the same architecture and constraints. **Delete this entry once the English generator exists and `english_levels.json` is produced by it.**
+Both generators share the same architecture (D10–D13): frequency list as iteration source, hunspell as quality gate, difficulty profiles, `make_level()` helper, `level_{tier}_{index}` naming, `main()` stamping `difficulty` and `levelNumber`. This entry documents the decisions that differ by language.
 
-**Step 1 — English frequency list**
+---
 
-Download the hermitdave English frequency list (same project, same MIT licence):
+### Russian-specific decisions
 
-```
-https://github.com/hermitdave/FrequencyWords/blob/master/content/2018/en/en_50k.txt
-```
+**Morphology library — pymorphy3**
 
-Place at `assets/data/en_freq.txt`. Format is identical to `ru_freq.txt`: one `word count` pair per line. Load with the existing `load_freq()` function (no changes needed).
+pymorphy3 (OpenCorpora) is the standard Russian morphological analyser. It produces a canonical lemma via `get_lemma()` which returns: nominative singular for nouns, infinitive for verbs, and short masculine singular (краткая форма) for adjectives. Short adjective forms are preferred over full forms (`красив` not `красивый`) for aesthetic reasons — they are shorter and more literary, fitting the Soviet Notebook theme.
 
-**Step 2 — English morphology (replaces pymorphy3)**
+**Why iterate ru_freq.txt rather than the hunspell .dic:** The hunspell `.dic` stores full adjective forms (`-ый/-ий`) as base entries. Short adjective forms (краткая форма, e.g. `красив`) do not appear in the `.dic` and would be silently lost if we iterated over it. The frequency list contains both full and short forms as separate corpus entries, so short-form adjectives are correctly seen and pass the `get_lemma(word) == word` check. Hunspell is applied as a quality gate on top of the frequency list rather than as the iteration source.
 
-pymorphy3 is Russian-only. For English lemmatization install two packages:
+**POS filters:** Proper nouns (`Name`, `Surn`, `Patr`, `Geox`, `Orgn`, `Trad` grammeme tags) and prepositions (`PREP` POS) are removed. Short prepositions (в, на, по) feel like unearned answers; longer ones may be added manually as bonus words.
 
-```
-pip install nltk lemminflect
-```
+**Profile threshold values:** See D13. The Russian frequency list uses raw corpus counts from the hermitdave OpenSubtitles 2018 dataset. The values (ft=200–5000, mf=5000–20000) were calibrated against all 23 Russian source words.
 
-Then bootstrap NLTK once:
+**Calibration tool:** `tools/level_generator/calibrate.py` — run with `py calibrate.py` to score all 23 source words against all 5 profiles in one pass. Re-run when adding source words or adjusting profiles.
 
-```python
-import nltk
-nltk.download('wordnet')
-nltk.download('averaged_perceptron_tagger_eng')
-```
+---
 
-Replace the Russian `get_lemma()` function with an English equivalent:
+### English-specific decisions
 
-```python
-from nltk.stem import WordNetLemmatizer
-from nltk import pos_tag
+**Morphology library — NLTK WordNetLemmatizer**
 
-_lemmatizer = WordNetLemmatizer()
+pymorphy3 is Russian-only. The English generator uses NLTK's `WordNetLemmatizer` with a POS hint from NLTK's perceptron tagger. `get_lemma_en(word)` mirrors `get_lemma(word)` in the Russian generator: it produces the canonical base form for the word's estimated POS, and `generate_level()` skips any word where `get_lemma_en(word) != word`.
 
-_POS_MAP = {'NN': 'n', 'VB': 'v', 'JJ': 'a', 'RB': 'r'}
+**Why single-POS, not all-POS:** An earlier implementation used an all-POS check (reject if ANY POS lemmatizer changes the word). This is over-conservative: "left" (a valid adjective lemma) would be rejected because verb lemmatisation reduces it to "leave". Using the tagger's estimated POS keeps valid lemmas that coincidentally happen to be inflected forms for a different POS.
 
-def get_lemma_en(word):
-    """Return the lemma of word, or None if it is not in base/lemma form."""
-    tag = pos_tag([word])[0][1][:2]
-    pos = _POS_MAP.get(tag, 'n')
-    lemma = _lemmatizer.lemmatize(word.lower(), pos)
-    return lemma if lemma == word.lower() else None
-```
+**Known limitation of single-POS:** NLTK's perceptron tagger defaults to `NN` when uncertain on isolated words (no sentence context). A small number of inflected verb forms may be tagged as NN and pass through (e.g. "running" tagged as NN: `lemmatize("running", "n")` = "running"). In practice this is rare — hunspell accepts these words, so they appear as minor extra entries rather than causing crashes. The frequency list is large enough that genuine lemmas dominate.
 
-**Step 3 — English hunspell dictionary**
+**POS filters:** Proper nouns (`NNP`/`NNPS` tags) and prepositions (`IN` tag) are removed. Note: NLTK tagging of isolated lowercase words almost never returns `NNP`, so the hunspell gate and blocklist do most proper-noun rejection in practice.
 
-Install the LibreOffice en_US dictionary via pyenchant:
+**Frequency list:** `tools/level_generator/en_freq.txt` — hermitdave English OpenSubtitles 2018 full list (same project as Russian, MIT licence). The English loader deduplicates by keeping the highest-count entry if a word appears twice (an edge case absent in the Russian list).
 
-```
-pip install pyenchant
-```
+**Profile threshold values:** English vocabulary density is significantly higher than Russian — the same raw thresholds would yield far too many required words per level. Profiles were recalibrated for English (ft=800–80000, mf=15000–500000 vs. Russian's ft=200–5000, mf=5000–20000). The calibration methodology is identical: sweep all profiles against all source words, assign each word to the profile closest to 10 required words. 15 of 20 English source words land in the 7–13 band; 5 are flagged with TODO comments pending source-word replacement.
 
-pyenchant ships `en_US` by default on most systems. If not, download `en_US.dic` and `en_US.aff` from `https://github.com/LibreOffice/dictionaries/tree/master/en` and point pyenchant at them. Replace `enchant.Dict('ru_RU')` with `enchant.Dict('en_US')` in the generator.
+**Calibration tool:** `tools/level_generator/calibrate_en.py` — run with `python calibrate_en.py` to score all source words against all 5 profiles. Re-run when adding source words, adjusting profiles, or replacing TODO source words.
 
-**Step 4 — Adapting generate_level() for English**
-
-The classification logic, PROFILES, PROFILE_DIFFICULTY, and canFormWord() are all language-agnostic — carry them over unchanged. The only changes to `generate_level()` are:
-
-1. Replace `morph.parse(word)[0]` with the English lemmatizer call
-2. Remove the Russian-specific proper noun / preposition tag filters; replace with English equivalents (NLTK tags `NNP`/`NNPS` for proper nouns; `IN` for prepositions)
-3. The `get_lemma(word) == word` guard (keeps only base forms) works the same way
-
-**Step 5 — Profile calibration for English**
-
-Run the 5 profiles against candidate source words and record required-word counts. English vocabulary density differs from Russian — the P1–P5 thresholds may need recalibrating. The same methodology applies: pick the profile that puts a source word in the 8–12 required word target range. Recalibrate by adjusting `freq_threshold` / `max_freq` / `max_length` until the distribution looks right across a sample of 10+ source words.
-
-**Step 6 — Level function naming and output**
-
-Level function names follow the same `level_{tier}_{index}` convention. The `main()` function is unchanged — it stamps `difficulty` and `levelNumber` from `profile` automatically. Set `OUTPUT_FILE` to `assets/data/english_levels.json`.
-
-**Note on existing English levels:** `assets/data/english_levels.json` currently contains 20 hand-crafted levels (see D7). Running the English generator will overwrite this file. Retain a backup or migrate the hand-crafted source words into generator-style level functions before running.
+**Bootstrap:** Run `python bootstrap.py` once after `pip install -r requirements.txt` to download NLTK corpora (`wordnet`, `averaged_perceptron_tagger_eng`) and verify both hunspell dictionaries are available.

@@ -6,17 +6,17 @@ Covers pure functions that don't require hunspell dictionaries at runtime:
   - load_freq (with fixture)
   - load_blocklist (with fixture)
   - PROFILES structure
-  - English-specific: is_base_form
+  - Russian: get_lemma
+  - English: get_lemma_en
 
-Hunspell-dependent integration tests are gated with @pytest.mark.skipif
-so the suite runs cleanly on machines missing en_US or ru_RU dictionaries.
+Hunspell-dependent tests are gated with @pytest.mark.skipif so the suite
+runs cleanly on machines missing en_US or ru_RU dictionaries.
 
 Run with:
     pytest test_generators.py -v
 """
 
 import os
-import tempfile
 import pytest
 import enchant
 
@@ -45,7 +45,58 @@ if RU_AVAILABLE:
 
 
 # ---------------------------------------------------------------------------
-# Shared pure-function tests — run for whichever generators have their dict.
+# Russian pure-function tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not RU_AVAILABLE, reason="ru_RU hunspell dictionary not available")
+class TestRussianPureFunctions:
+    def test_letter_counts_basic(self):
+        assert generate.letter_counts("кот") == {'к': 1, 'о': 1, 'т': 1}
+
+    def test_letter_counts_empty(self):
+        assert generate.letter_counts("") == {}
+
+    def test_can_form_true(self):
+        src = generate.letter_counts("строитель")
+        assert generate.can_form("три", src) is True
+
+    def test_can_form_false_missing_letter(self):
+        src = generate.letter_counts("кот")
+        assert generate.can_form("кит", src) is False  # no 'и' in 'кот'
+
+    def test_can_form_false_not_enough_of_letter(self):
+        src = generate.letter_counts("кот")  # only one 'о'
+        assert generate.can_form("тоо", src) is False
+
+    def test_profiles_have_required_keys(self):
+        for name, profile in generate.PROFILES.items():
+            assert set(profile.keys()) == {'freq_threshold', 'max_freq', 'max_length'}, name
+            assert profile['freq_threshold'] < profile['max_freq'], name
+            assert profile['max_length'] >= generate.MIN_WORD_LENGTH, name
+
+    def test_profile_difficulty_mapping_complete(self):
+        for name in generate.PROFILES:
+            assert name in generate.PROFILE_DIFFICULTY
+
+    def test_get_lemma_returns_self_for_nominative_noun(self):
+        # кот is already nominative singular — should pass through unchanged
+        assert generate.get_lemma("кот") == "кот"
+
+    def test_get_lemma_reduces_genitive_noun(self):
+        # кота (genitive singular) → nominative singular кот
+        assert generate.get_lemma("кота") == "кот"
+
+    def test_get_lemma_returns_infinitive_for_verb(self):
+        # идёт (3rd person present) → infinitive идти
+        assert generate.get_lemma("идёт") == "идти"
+
+    def test_get_lemma_returns_short_adj_form(self):
+        # красивый (full adjective) → short masculine form красив
+        assert generate.get_lemma("красивый") == "красив"
+
+
+# ---------------------------------------------------------------------------
+# English pure-function tests
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not EN_AVAILABLE, reason="en_US hunspell dictionary not available")
@@ -81,44 +132,22 @@ class TestEnglishPureFunctions:
         for name in generate_en.PROFILES:
             assert name in generate_en.PROFILE_DIFFICULTY
 
-    def test_is_base_form_accepts_lemmas(self):
-        assert generate_en.is_base_form("run") is True
-        assert generate_en.is_base_form("eat") is True
-        assert generate_en.is_base_form("house") is True
+    def test_get_lemma_en_returns_self_for_base_forms(self):
+        assert generate_en.get_lemma_en("run") == "run"
+        assert generate_en.get_lemma_en("house") == "house"
+        assert generate_en.get_lemma_en("eat") == "eat"
 
-    def test_is_base_form_rejects_inflections(self):
-        assert generate_en.is_base_form("running") is False
-        assert generate_en.is_base_form("eating") is False
-        assert generate_en.is_base_form("houses") is False
+    def test_get_lemma_en_reduces_plural_noun(self):
+        assert generate_en.get_lemma_en("houses") != "houses"  # → "house"
 
-
-@pytest.mark.skipif(not RU_AVAILABLE, reason="ru_RU hunspell dictionary not available")
-class TestRussianPureFunctions:
-    def test_letter_counts_basic(self):
-        assert generate.letter_counts("кот") == {'к': 1, 'о': 1, 'т': 1}
-
-    def test_can_form_true(self):
-        src = generate.letter_counts("строитель")
-        assert generate.can_form("три", src) is True
-
-    def test_can_form_false(self):
-        src = generate.letter_counts("кот")
-        assert generate.can_form("кит", src) is False  # no 'и' in 'кот'
-
-    def test_profiles_have_required_keys(self):
-        for name, profile in generate.PROFILES.items():
-            assert set(profile.keys()) == {'freq_threshold', 'max_freq', 'max_length'}, name
-            assert profile['freq_threshold'] < profile['max_freq'], name
-
-    def test_profile_difficulty_mapping_complete(self):
-        for name in generate.PROFILES:
-            assert name in generate.PROFILE_DIFFICULTY
+    def test_get_lemma_en_reduces_verb_inflection(self):
+        assert generate_en.get_lemma_en("running") != "running"  # → "run"
 
 
 # ---------------------------------------------------------------------------
 # Fixture-based tests for load_freq and load_blocklist.
-# These don't need hunspell at all — import the generators lazily via
-# whichever is available (they share these function signatures).
+# These don't require hunspell — they test pure file-loading logic shared by
+# both generators. The fixture picks whichever module is importable.
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -131,9 +160,10 @@ def generator_module():
 
 
 def test_load_freq_skips_comments_and_noise(generator_module, tmp_path):
-    # The English loader uses LATIN regex; the Russian loader uses CYRILLIC.
-    # We pick data matching whichever module is in play.
-    if generator_module is generate_en if EN_AVAILABLE else False:
+    # English module uses a LATIN regex; Russian uses CYRILLIC.
+    # Use matching data for whichever module the fixture returned.
+    is_english = hasattr(generator_module, 'LATIN')
+    if is_english:
         content = "# comment\nhello 1000\nworld 500\n123 42\n"
         expected = {'hello': 1000, 'world': 500}
     else:

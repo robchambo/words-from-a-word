@@ -128,6 +128,11 @@ def load_freq(path):
 Blocklists = namedtuple('Blocklists', ['noise', 'profanity'])
 
 def load_blocklist(path):
+    """
+    Parses blocklist_en.txt by section header.
+    Returns Blocklists(noise, profanity) so generate_level can distinguish
+    which blocked words to include in the per-level review output.
+    """
     if not os.path.exists(path):
         return Blocklists(set(), set())
     noise = set()
@@ -168,26 +173,42 @@ hunspell = enchant.Dict('en_US')
 # ---------------------------------------------------------------------------
 # Lemmatization — NLTK WordNet
 #
-# WordNet's lemmatizer requires a POS hint. We try the 4 open-class POS
-# (noun, verb, adjective, adverb) and accept the word as a base form if at
-# least one POS produces lemma == word. Words that any POS strips (e.g. plural
-# 's', verb 'ed'/'ing', adjective 'er'/'est') are rejected as non-base.
+# Mirrors get_lemma() in the Russian generator: produce the canonical base
+# form and keep only words where get_lemma_en(word) == word, so inflected
+# forms (plurals, conjugations, comparatives) are skipped and their lemma is
+# processed separately when it appears in the frequency list.
+#
+# POS is estimated with NLTK's perceptron tagger. Isolated-word tagging is
+# less reliable than sentence-context tagging (defaults to NN when uncertain),
+# but in practice this causes very few errors: the frequency list is large
+# enough that genuine lemmas outnumber edge-case inflections, and any
+# inflection that does slip through is still a real English word accepted by
+# hunspell — it causes no crash and appears as a minor aesthetic imperfection.
+#
+# Why NOT the stricter all-POS check (is_base_form)?
+# Checking all 4 POS is over-conservative: "left" (a valid adjective lemma)
+# would be rejected because verb lemmatisation changes it to "leave". Using
+# the estimated POS keeps valid lemmas that happen to be inflected forms for
+# a different POS.
 # ---------------------------------------------------------------------------
 _lemmatizer = WordNetLemmatizer()
-_OPEN_POS = ('n', 'v', 'a', 'r')
 
-def is_base_form(word):
+# NLTK tag prefix → WordNet POS
+_NLTK_TO_WN = {'NN': 'n', 'VB': 'v', 'JJ': 'a', 'RB': 'r'}
+
+def get_lemma_en(word):
     """
-    True if `word` is its own lemma under all 4 open-class WordNet POS.
-    Returns False if any POS reduces it to a different base form, which
-    indicates `word` is an inflected/derived form whose lemma will appear
-    elsewhere in the frequency list.
+    Returns the canonical base form (lemma) for an English word.
+
+    Uses NLTK's perceptron tagger to estimate POS, then WordNetLemmatizer to
+    produce the lemma for that POS. Only words where get_lemma_en(word) == word
+    are kept by generate_level() — all others are inflected forms whose lemma
+    will appear separately in the frequency list.
     """
     w = word.lower()
-    for pos in _OPEN_POS:
-        if _lemmatizer.lemmatize(w, pos) != w:
-            return False
-    return True
+    raw_tag = pos_tag([w])[0][1][:2]
+    wn_pos = _NLTK_TO_WN.get(raw_tag, 'n')
+    return _lemmatizer.lemmatize(w, wn_pos)
 
 # ---------------------------------------------------------------------------
 # POS-based filters via NLTK perceptron tagger.
@@ -247,7 +268,7 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
 
         # Skip non-base forms — their lemma will appear in the frequency list
         # separately.
-        if not is_base_form(word):
+        if get_lemma_en(word) != word:
             continue
 
         if word in excluded:

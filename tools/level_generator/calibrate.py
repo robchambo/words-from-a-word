@@ -1,13 +1,13 @@
 """
-Profile calibration for the English level generator.
+Profile calibration for the Russian level generator.
 
-For each English source word, runs the expensive filters (formability,
-hunspell, NLTK lemma + POS) ONCE to build a candidate set, then sweeps the
-5 seeded profiles cheaply over those candidates. Prints a table of
+For each Russian source word, runs the expensive filters (formability,
+hunspell, pymorphy3 lemma + POS) ONCE to build a candidate set, then sweeps
+the 5 seeded profiles cheaply over those candidates. Prints a table of
 required-word counts per (source_word, profile) to inform tuning of PROFILES
-in generate_en.py.
+in generate.py.
 
-Production generate_en.py is not modified — this script duplicates its
+Production generate.py is not modified — this script duplicates its
 inner-loop filtering for sweep efficiency.
 
 Target: each source word should land 7–13 required words at its assigned
@@ -18,20 +18,22 @@ Re-run this script whenever:
   - PROFILES values are being adjusted
   - A TODO source word is being replaced
 
-See calibrate.py for the equivalent Russian calibration tool.
+See calibrate_en.py for the equivalent English calibration tool.
 
 Usage:
-    python calibrate_en.py
+    py calibrate.py
 """
 
 import time
-import generate_en as g
+import generate as g
 
 SOURCE_WORDS = [
-    "strawberry", "carpenter", "chocolate", "mountains", "blackboard",
-    "breakfast", "telephone", "adventure", "fireworks", "landscape",
-    "waterfall", "butterfly", "classroom", "newspaper", "basketball",
-    "thunderstorm", "springtime", "pineapple", "chemistry", "playground",
+    "строитель", "государство", "воображение", "воспитание", "сотрудник",
+    "правительство", "достижение", "архитектура", "библиотека", "холодильник",
+    "университет", "расстояние", "переводчик", "образование", "произведение",
+    "телевизор", "приключение", "картошка", "направление",
+    "литература", "комсомолец",
+    "математика", "территория",
 ]
 
 PROFILE_ORDER = ['P1_BEGINNER', 'P2_EASY', 'P3_MEDIUM', 'P4_HARD', 'P5_EXPERT']
@@ -39,9 +41,9 @@ PROFILE_ORDER = ['P1_BEGINNER', 'P2_EASY', 'P3_MEDIUM', 'P4_HARD', 'P5_EXPERT']
 
 def build_candidates(source_word, freq, blocklists):
     """
-    Mirror of generate_en.generate_level()'s expensive inner loop, but
-    returns the (word, count) candidate set rather than classifying it.
-    Profile-band classification is then trivial.
+    Mirror of generate.generate_level()'s expensive inner loop, but returns
+    the (word, count) candidate set rather than classifying it.
+    Profile-band classification is then a cheap second pass.
     """
     src = source_word.lower()
     src_counts = g.letter_counts(src)
@@ -55,11 +57,17 @@ def build_candidates(source_word, freq, blocklists):
             continue
         if not g.hunspell.check(word):
             continue
-        if g.get_lemma_en(word) != word:
+        if g.get_lemma(word) != word:
             continue
-        tag = g.get_tag(word)
-        if tag in g.PROPER_NOUN_TAGS or tag in g.PREPOSITION_TAGS:
+
+        parsed = g.morph.parse(word)
+        if not parsed:
             continue
+        if parsed[0].tag.grammemes & g.PROPER_NOUN_TAGS:
+            continue
+        if parsed[0].tag.POS == 'PREP':
+            continue
+
         if word in blocklists.profanity:
             continue
         if word in blocklists.noise:
@@ -90,11 +98,11 @@ def main():
     for src in SOURCE_WORDS:
         cands = build_candidates(src, freq, blocklists)
         candidates_by_src[src] = cands
-        print(f"  {src:<14} {len(cands):>4} candidates  ({time.time()-t0:.1f}s)")
+        print(f"  {src:<16} {len(cands):>4} candidates  ({time.time()-t0:.1f}s)")
     print(f"Total candidate-build time: {time.time()-t0:.1f}s")
 
     print()
-    header = f"{'source word':<14} " + " ".join(f"{p[3:6]:>5}" for p in PROFILE_ORDER) + "   best fit"
+    header = f"{'source word':<16} " + " ".join(f"{p[3:6]:>5}" for p in PROFILE_ORDER) + "   best fit"
     print(header)
     print("-" * len(header))
 
@@ -115,7 +123,7 @@ def main():
 
         cells = " ".join(f"{counts_per_profile[p]:>5}" for p in PROFILE_ORDER)
         in_band = "OK" if 7 <= counts_per_profile[best] <= 13 else "--"
-        print(f"{src:<14} {cells}   {best} ({counts_per_profile[best]}) {in_band}")
+        print(f"{src:<16} {cells}   {best} ({counts_per_profile[best]}) {in_band}")
 
     print()
     print(f"In band (7-13 required words): {in_band_total} / {len(SOURCE_WORDS)}")
@@ -127,8 +135,10 @@ def main():
     print()
     print("Suggested level function profile assignments:")
     for src, (profile, count) in assignments.items():
-        print(f"    level_{src}: '{profile}'  # {count} required")
+        print(f"    {src}: '{profile}'  # {count} required")
 
 
 if __name__ == '__main__':
+    import io, sys
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     main()
