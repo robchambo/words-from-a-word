@@ -2,7 +2,7 @@
 pymorphy3==2.0.4
 
 # English generator
-nltk==3.9.1
+spacy>=3.7.0
 
 # Both
 pyenchant==3.3.0rc1

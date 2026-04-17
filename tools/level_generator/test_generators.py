@@ -41,7 +41,7 @@ if EN_AVAILABLE:
     import generate_en
 
 if RU_AVAILABLE:
-    import generate
+    import generate_ru as generate
 
 
 # ---------------------------------------------------------------------------

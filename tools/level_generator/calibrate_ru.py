@@ -1,30 +1,33 @@
 """
-Global vocabulary calibration for the English level generator.
+Global vocabulary calibration for the Russian level generator.
 
-Two-phase tool — mirrors calibrate_ru.py for English.
+Two-phase tool:
 
   Phase 1 — Global vocabulary build
-    Runs the full en_freq.txt through the same quality gate as generate_en.py
-    (hunspell + spaCy lemma + POS filters + blocklist), without any
-    formability constraint. Caches the resulting set of (word, count) pairs
-    to vocab_cache_en.json. Expensive on first run (~1–3 min); subsequent
-    runs load from cache in seconds.
+    Runs the full ru_freq.txt through the same quality gate as generate_ru.py
+    (formability is skipped — we want all valid lemmas, not just those
+    formable from a specific source word). Caches the resulting set of
+    (word, count) pairs to vocab_cache_ru.json. This is the expensive step
+    (~1–2 min on first run); subsequent runs load from cache in seconds.
 
     After building the cache, prints vocabulary frequency distribution
-    statistics and suggests freq_threshold percentile cutoffs for stable
-    PROFILES values in generate_en.py.
+    statistics and suggests freq_threshold percentile cutoffs. Use these
+    to inform PROFILES values in generate_ru.py that remain stable as new
+    source words are added — thresholds anchored to the global vocabulary
+    distribution do not drift when the source word set changes.
 
   Phase 2 — Source word evaluation
-    For each source word, filters the global vocab cache to words formable
-    from that source word's letters, then counts how many would be required
-    under each profile. Prints a required-word count table.
+    For each source word in SOURCE_WORDS, filters the global vocab cache
+    to words formable from that source word's letters, then counts how many
+    would be classified as required under each profile. Prints the same
+    required-word count table as before.
 
     Target: each source word should land 7–13 required words at its
     assigned profile (best-fit closest to 10).
 
 Usage:
-    python calibrate_en.py              # load cache if present, else build it
-    python calibrate_en.py --rebuild    # force rebuild the cache
+    py calibrate_ru.py              # load cache if present, else build it
+    py calibrate_ru.py --rebuild    # force rebuild the cache
 
 Re-run whenever:
   - A new source word is being evaluated for a level
@@ -32,7 +35,7 @@ Re-run whenever:
   - A TODO source word is being replaced
   - The blocklist is significantly updated (run with --rebuild)
 
-See calibrate_ru.py for the equivalent Russian tool.
+See calibrate_en.py for the equivalent English tool.
 """
 
 import argparse
@@ -40,15 +43,18 @@ import json
 import os
 import sys
 import time
-import generate_en as g
+import io
+import generate_ru as g
 
-CACHE_FILE = os.path.join(g.SCRIPT_DIR, 'vocab_cache_en.json')
+CACHE_FILE = os.path.join(g.SCRIPT_DIR, 'vocab_cache_ru.json')
 
 SOURCE_WORDS = [
-    "strawberry", "carpenter", "chocolate", "mountains", "blackboard",
-    "breakfast", "telephone", "adventure", "fireworks", "landscape",
-    "waterfall", "butterfly", "classroom", "newspaper", "basketball",
-    "thunderstorm", "springtime", "pineapple", "chemistry", "playground",
+    "строитель", "государство", "воображение", "воспитание", "сотрудник",
+    "правительство", "достижение", "архитектура", "библиотека", "холодильник",
+    "университет", "расстояние", "переводчик", "образование", "произведение",
+    "телевизор", "приключение", "картошка", "направление",
+    "литература", "комсомолец",
+    "математика", "территория",
 ]
 
 PROFILE_ORDER = ['P1_BEGINNER', 'P2_EASY', 'P3_MEDIUM', 'P4_HARD', 'P5_EXPERT']
@@ -63,14 +69,14 @@ PERCENTILES = [50, 75, 90, 95, 99]
 
 def build_global_vocab(freq, blocklists):
     """
-    Runs the full frequency list through the generate_en quality gate
-    (hunspell + spaCy lemma + POS filters + blocklist) without any
+    Runs the full frequency list through the generate_ru quality gate
+    (hunspell + pymorphy3 lemma + POS filters + blocklist) without any
     formability constraint. Returns a list of (word, count) pairs for all
-    valid English lemmas, sorted by count descending.
+    valid Russian lemmas, sorted by count descending.
 
-    This is the expensive step; results are cached to vocab_cache_en.json.
+    This is the expensive step; results are cached to vocab_cache_ru.json.
     """
-    print("Building global vocabulary (this may take 1-3 min)...")
+    print("Building global vocabulary (this takes ~1-2 min)...")
     t0 = time.time()
     vocab = []
     checked = 0
@@ -80,13 +86,17 @@ def build_global_vocab(freq, blocklists):
             continue
         if not g.hunspell.check(word):
             continue
-        if g.get_lemma_en(word) != word:
+        if g.get_lemma(word) != word:
             continue
 
-        tag = g.get_tag(word)
-        if tag in g.PROPER_NOUN_TAGS:
+        parsed = g.morph.parse(word)
+        if not parsed:
             continue
-        if tag in g.FUNCTION_WORD_POS or word in g.FUNCTION_WORDS:
+        if parsed[0].tag.grammemes & g.PROPER_NOUN_TAGS:
+            continue
+
+        pos = parsed[0].tag.POS
+        if pos in g.FUNCTION_WORD_POS or word in g.FUNCTION_WORDS:
             continue
 
         if word in blocklists.profanity or word in blocklists.noise:
@@ -126,6 +136,10 @@ def print_distribution_stats(vocab):
     """
     Prints frequency distribution of the global vocab and suggests
     freq_threshold cutoffs at key percentile points.
+
+    Use these to set stable PROFILES values in generate_ru.py. Percentile-
+    anchored thresholds remain valid as the source word set grows, because
+    they describe the vocabulary distribution, not the current source words.
     """
     if not vocab:
         return
@@ -133,7 +147,7 @@ def print_distribution_stats(vocab):
     n = len(counts)
 
     print()
-    print(f"Global vocabulary: {n:,} valid English lemmas")
+    print(f"Global vocabulary: {n:,} valid Russian lemmas")
     print(f"  Frequency range: {counts[-1]:,} – {counts[0]:,}")
     print()
     print("Frequency at percentile cutoffs:")
@@ -150,6 +164,7 @@ def print_distribution_stats(vocab):
     for p in [10, 20, 30, 40, 50]:
         idx = int((p / 100) * n)
         idx = max(0, min(idx, n - 1))
+        # freq_threshold: bottom p% of vocab goes to bonus
         cutoff = counts[-(idx+1)] if idx < n else counts[-1]
         print(f"  bottom {p:2d}% → freq_threshold ~{cutoff:>8,}")
 
@@ -189,11 +204,11 @@ def print_source_word_table(vocab):
     for src in SOURCE_WORDS:
         cands = build_candidates_from_vocab(src, vocab)
         candidates_by_src[src] = cands
-        print(f"  {src:<14} {len(cands):>4} candidates")
+        print(f"  {src:<16} {len(cands):>4} candidates")
     print(f"  ({time.time()-t0:.1f}s)")
 
     print()
-    header = f"{'source word':<14} " + " ".join(f"{p[3:6]:>5}" for p in PROFILE_ORDER) + "   best fit"
+    header = f"{'source word':<16} " + " ".join(f"{p[3:6]:>5}" for p in PROFILE_ORDER) + "   best fit"
     print(header)
     print("-" * len(header))
 
@@ -215,7 +230,7 @@ def print_source_word_table(vocab):
 
         cells = " ".join(f"{counts_per_profile[p]:>5}" for p in PROFILE_ORDER)
         in_band = "OK" if 7 <= counts_per_profile[best] <= 13 else "--"
-        print(f"{src:<14} {cells}   {best} ({counts_per_profile[best]}) {in_band}")
+        print(f"{src:<16} {cells}   {best} ({counts_per_profile[best]}) {in_band}")
 
     print()
     print(f"In band (7-13 required words): {in_band_total} / {len(SOURCE_WORDS)}")
@@ -226,7 +241,7 @@ def print_source_word_table(vocab):
     print()
     print("Suggested level function profile assignments:")
     for src, (profile, count) in assignments.items():
-        print(f"    level_{src}: '{profile}'  # {count} required")
+        print(f"    {src}: '{profile}'  # {count} required")
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +249,7 @@ def print_source_word_table(vocab):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Calibrate English level generator profiles.")
+    parser = argparse.ArgumentParser(description="Calibrate Russian level generator profiles.")
     parser.add_argument('--rebuild', action='store_true',
                         help='Force rebuild the global vocab cache.')
     args = parser.parse_args()
@@ -249,6 +264,5 @@ def main():
 
 
 if __name__ == '__main__':
-    import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     main()

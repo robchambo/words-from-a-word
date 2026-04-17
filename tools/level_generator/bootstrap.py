@@ -11,10 +11,9 @@ pyenchant can resolve the en_US and ru_RU hunspell dictionaries.
 
 import sys
 
-print("Downloading NLTK corpora...")
-import nltk
-for pkg in ['wordnet', 'averaged_perceptron_tagger_eng']:
-    nltk.download(pkg, quiet=True)
+print("Downloading spaCy English model (en_core_web_sm)...")
+import spacy.cli
+spacy.cli.download("en_core_web_sm")
 print("  done.")
 
 print("Verifying pyenchant dictionaries...")

@@ -1,0 +1,13 @@
+# Explicit function words for the English level generator.
+# Supplements FUNCTION_WORD_POS in generate_en.py for edge cases where
+# spaCy assigns an unexpected POS tag to a word that is semantically
+# a function word when seen in isolation.
+#
+# One word per line, lowercase. Lines starting with # are ignored.
+# The generator lemma-checks all words before this point, so entries here
+# should be base forms.
+#
+# spaCy's en_core_web_sm tags isolated words reliably for most function
+# word categories. Add to this file only when you observe a function word
+# appearing in required or bonus during generation review and confirm
+# spaCy is tagging it incorrectly on isolated input.

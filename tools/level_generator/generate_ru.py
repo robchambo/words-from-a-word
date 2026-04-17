@@ -5,7 +5,7 @@ For each source word, produces required, bonus, too_common, and blocked word
 lists, writing the result to assets/data/russian_levels.json.
 
 Usage:
-    py generate.py
+    py generate_ru.py
 
 Word quality gate:
     The LibreOffice Russian hunspell dictionary is the primary source of truth
@@ -95,7 +95,8 @@ PROFILE_DIFFICULTY = {
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.join(SCRIPT_DIR, '..', '..')
 FREQ_FILE = os.path.join(SCRIPT_DIR, 'ru_freq.txt')
-BLOCKLIST_FILE = os.path.join(SCRIPT_DIR, 'blocklist.txt')
+BLOCKLIST_FILE = os.path.join(SCRIPT_DIR, 'blocklist_ru.txt')
+FUNCTION_WORDS_FILE = os.path.join(SCRIPT_DIR, 'function_words_ru.txt')
 OUTPUT_FILE = os.path.join(REPO_ROOT, 'assets', 'data', 'russian_levels.json')
 
 # ---------------------------------------------------------------------------
@@ -129,7 +130,7 @@ Blocklists = namedtuple('Blocklists', ['noise', 'profanity'])
 
 def load_blocklist(path):
     """
-    Parses blocklist.txt by section header.
+    Parses blocklist_ru.txt by section header.
     Returns Blocklists(noise, profanity) so generate_level can distinguish
     which blocked words to include in the per-level review output.
     """
@@ -148,6 +149,25 @@ def load_blocklist(path):
             elif line and not line.startswith('#') and current is not None:
                 current.add(line.lower())
     return Blocklists(noise, profanity)
+
+# ---------------------------------------------------------------------------
+# Load function words explicit list — supplements FUNCTION_WORD_POS for
+# edge cases that pymorphy3 mislabels or that have no clean POS category.
+# ---------------------------------------------------------------------------
+def load_function_words(path):
+    """
+    Returns a set of lowercase word strings from function_words_ru.txt.
+    Lines starting with # are comments. Missing file returns empty set.
+    """
+    if not os.path.exists(path):
+        return set()
+    words = set()
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                words.add(line.lower())
+    return words
 
 # ---------------------------------------------------------------------------
 # Letter utilities
@@ -186,10 +206,24 @@ hunspell = enchant.Dict('ru_RU')
 # ---------------------------------------------------------------------------
 morph = pymorphy3.MorphAnalyzer()
 
-# Proper noun grammeme tags — filtered out because they are not general
+# Proper noun grammeme tags — filtered out entirely because they are not general
 # vocabulary. May be added back manually for themed levels (geography,
 # literature, etc.) via the level JSON overrides.
 PROPER_NOUN_TAGS = {'Name', 'Surn', 'Patr', 'Geox', 'Orgn', 'Trad'}
+
+# Function word POS tags — words with these POS are routed to tooCommon
+# (not silently dropped) so the player sees "too common" feedback when
+# they try to enter one. Pronouns, conjunctions, particles, prepositions,
+# interjections, and predicatives are grammatical glue words; they are
+# valid Russian words but make poor game targets.
+# PREP was previously dropped silently; now it surfaces as tooCommon.
+# See docs/DECISIONS.md D15.
+FUNCTION_WORD_POS = {'PREP', 'NPRO', 'CONJ', 'PRCL', 'INTJ', 'PRED'}
+
+# Module-level load of the explicit function words list. Most function words
+# are caught by FUNCTION_WORD_POS; this file covers edge cases where
+# pymorphy3 assigns an unexpected POS.
+FUNCTION_WORDS = load_function_words(FUNCTION_WORDS_FILE)
 
 def get_lemma(word):
     """
@@ -250,10 +284,11 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
     The default parameter values match P3_MEDIUM and exist only as a safety
     net — in practice every level function passes an explicit profile.
 
-    Classification order:
-      count >= max_freq                                     → too_common
-      len <= max_length AND freq_threshold <= count < max_freq → required
-      otherwise                                             → bonus
+    Classification order (after quality gate):
+      POS in FUNCTION_WORD_POS, or word in function_words_ru.txt → too_common
+      count >= max_freq  (high-frequency content word)           → too_common
+      len <= max_length AND count >= freq_threshold              → required
+      otherwise                                                  → bonus
 
     Only words that pass the hunspell quality gate are considered. The
     frequency list is used solely for corpus count lookup.
@@ -306,10 +341,13 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
         if parsed[0].tag.grammemes & PROPER_NOUN_TAGS:
             continue
 
-        # Filter prepositions — short ones (в, на, по) feel like unearned
-        # answers and clutter the required list. Longer ones (перед, вокруг)
-        # may be added manually as bonus words for specific levels.
-        if parsed[0].tag.POS == 'PREP':
+        # Route function words to tooCommon so the player sees "too common"
+        # feedback when they enter one, rather than getting no response.
+        # Covers prepositions, pronouns, conjunctions, particles,
+        # interjections, and predicatives. See docs/DECISIONS.md D15.
+        pos = parsed[0].tag.POS
+        if pos in FUNCTION_WORD_POS or word in FUNCTION_WORDS:
+            too_common.append(word)
             continue
 
         # Noise blocklist — track these separately so curators can review.
@@ -359,6 +397,7 @@ def make_level(source_word, profile_name, freq, blocklists, overrides_excluded=N
 # difficulty number (1=beginner … 5=expert) and index restarts at 1 per tier.
 # main() stamps "difficulty" and "levelNumber" onto each entry automatically.
 # To add a level: add a function here, list it in LEVELS, and run the generator.
+# Profile assignments verified by calibrate_ru.py against global vocabulary.
 # ---------------------------------------------------------------------------
 
 # --- Tier 1: P1_BEGINNER ---
@@ -368,24 +407,16 @@ def level_1_1(freq, blocklists):
     return make_level("строитель", 'P1_BEGINNER', freq, blocklists)
 
 def level_1_2(freq, blocklists):
-    # государство — P1_BEGINNER (~7 required)
+    # государство — P1_BEGINNER (~5 required)
     return make_level("государство", 'P1_BEGINNER', freq, blocklists)
 
 def level_1_3(freq, blocklists):
-    # воображение — P1_BEGINNER (~7 required)
-    return make_level("воображение", 'P1_BEGINNER', freq, blocklists)
-
-def level_1_4(freq, blocklists):
-    # воспитание — P1_BEGINNER (~9 required)
-    return make_level("воспитание", 'P1_BEGINNER', freq, blocklists)
-
-def level_1_5(freq, blocklists):
     # сотрудник — P1_BEGINNER (~12 required)
     return make_level("сотрудник", 'P1_BEGINNER', freq, blocklists)
 
-def level_1_6(freq, blocklists):
+def level_1_4(freq, blocklists):
     # правительство — TODO: needs a replacement source word.
-    # No profile gives fewer than 14 required words; letters form too many common words.
+    # No profile gives fewer than 13 required words; letters form too many common words.
     # Temporary: P1_BEGINNER to minimise the excess.
     return make_level("правительство", 'P1_BEGINNER', freq, blocklists)
 
@@ -396,36 +427,36 @@ def level_2_1(freq, blocklists):
     return make_level("достижение", 'P2_EASY', freq, blocklists)
 
 def level_2_2(freq, blocklists):
-    # архитектура — P2_EASY (~7 required)
-    return make_level("архитектура", 'P2_EASY', freq, blocklists)
-
-def level_2_3(freq, blocklists):
-    # библиотека — P2_EASY (~8 required)
-    return make_level("библиотека", 'P2_EASY', freq, blocklists)
-
-def level_2_4(freq, blocklists):
     # холодильник — P2_EASY (~8 required)
     return make_level("холодильник", 'P2_EASY', freq, blocklists)
 
-def level_2_5(freq, blocklists):
-    # университет — P2_EASY (~9 required)
+def level_2_3(freq, blocklists):
+    # университет — P2_EASY (~8 required)
     return make_level("университет", 'P2_EASY', freq, blocklists)
 
-def level_2_6(freq, blocklists):
+def level_2_4(freq, blocklists):
+    # воспитание — P2_EASY (~10 required)
+    return make_level("воспитание", 'P2_EASY', freq, blocklists)
+
+def level_2_5(freq, blocklists):
     # расстояние — P2_EASY (~10 required)
     return make_level("расстояние", 'P2_EASY', freq, blocklists)
 
-def level_2_7(freq, blocklists):
+def level_2_6(freq, blocklists):
     # переводчик — P2_EASY (~11 required)
     return make_level("переводчик", 'P2_EASY', freq, blocklists)
 
-def level_2_8(freq, blocklists):
-    # образование — P2_EASY (~13 required)
+def level_2_7(freq, blocklists):
+    # образование — P2_EASY (~11 required)
     return make_level("образование", 'P2_EASY', freq, blocklists)
 
-def level_2_9(freq, blocklists):
-    # произведение — P2_EASY (~13 required)
+def level_2_8(freq, blocklists):
+    # произведение — P2_EASY (~12 required)
     return make_level("произведение", 'P2_EASY', freq, blocklists)
+
+def level_2_9(freq, blocklists):
+    # воображение — P2_EASY (~13 required)
+    return make_level("воображение", 'P2_EASY', freq, blocklists)
 
 # --- Tier 3: P3_MEDIUM ---
 
@@ -438,30 +469,38 @@ def level_3_2(freq, blocklists):
     return make_level("приключение", 'P3_MEDIUM', freq, blocklists)
 
 def level_3_3(freq, blocklists):
+    # направление — P3_MEDIUM (~10 required)
+    return make_level("направление", 'P3_MEDIUM', freq, blocklists)
+
+def level_3_4(freq, blocklists):
     # картошка — P3_MEDIUM (~11 required)
     return make_level("картошка", 'P3_MEDIUM', freq, blocklists)
 
-def level_3_4(freq, blocklists):
-    # направление — P3_MEDIUM (~12 required)
-    return make_level("направление", 'P3_MEDIUM', freq, blocklists)
+def level_3_5(freq, blocklists):
+    # библиотека — P3_MEDIUM (~11 required)
+    return make_level("библиотека", 'P3_MEDIUM', freq, blocklists)
+
+def level_3_6(freq, blocklists):
+    # архитектура — P3_MEDIUM (~13 required)
+    return make_level("архитектура", 'P3_MEDIUM', freq, blocklists)
 
 # --- Tier 4: P4_HARD ---
 
 def level_4_1(freq, blocklists):
-    # литература — P4_HARD (~9 required)
-    return make_level("литература", 'P4_HARD', freq, blocklists)
-
-def level_4_2(freq, blocklists):
-    # комсомолец — P4_HARD (~10 required)
+    # комсомолец — P4_HARD (~9 required)
     return make_level("комсомолец", 'P4_HARD', freq, blocklists)
 
 # --- Tier 5: P5_EXPERT ---
 
 def level_5_1(freq, blocklists):
-    # математика — P5_EXPERT (~12 required)
+    # математика — P5_EXPERT (~10 required)
     return make_level("математика", 'P5_EXPERT', freq, blocklists)
 
 def level_5_2(freq, blocklists):
+    # литература — P5_EXPERT (~12 required)
+    return make_level("литература", 'P5_EXPERT', freq, blocklists)
+
+def level_5_3(freq, blocklists):
     # территория — TODO: needs a replacement source word.
     # Max 5 required at any profile due to limited formable vocabulary.
     # Temporary: P5_EXPERT to surface as many words as possible.
@@ -472,12 +511,12 @@ def level_5_2(freq, blocklists):
 # main() assigns "difficulty" and "levelNumber" automatically from "profile".
 # ---------------------------------------------------------------------------
 LEVELS = [
-    level_1_1, level_1_2, level_1_3, level_1_4, level_1_5, level_1_6,
+    level_1_1, level_1_2, level_1_3, level_1_4,
     level_2_1, level_2_2, level_2_3, level_2_4, level_2_5,
     level_2_6, level_2_7, level_2_8, level_2_9,
-    level_3_1, level_3_2, level_3_3, level_3_4,
-    level_4_1, level_4_2,
-    level_5_1, level_5_2,
+    level_3_1, level_3_2, level_3_3, level_3_4, level_3_5, level_3_6,
+    level_4_1,
+    level_5_1, level_5_2, level_5_3,
 ]
 
 # ---------------------------------------------------------------------------

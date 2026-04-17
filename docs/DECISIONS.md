@@ -155,7 +155,7 @@ Each level function is assigned to the profile that gives it the closest require
 
 ---
 
-## D14 — Language-specific generator decisions (Russian: pymorphy3; English: NLTK + WordNet)
+## D14 — Language-specific generator decisions (Russian: pymorphy3; English: spaCy)
 
 Both generators share the same architecture (D10–D13): frequency list as iteration source, hunspell as quality gate, difficulty profiles, `make_level()` helper, `level_{tier}_{index}` naming, `main()` stamping `difficulty` and `levelNumber`. This entry documents the decisions that differ by language.
 
@@ -179,15 +179,15 @@ pymorphy3 (OpenCorpora) is the standard Russian morphological analyser. It produ
 
 ### English-specific decisions
 
-**Morphology library — NLTK WordNetLemmatizer**
+**Morphology library — spaCy `en_core_web_sm` *(originally NLTK; see addendum below)***
 
-pymorphy3 is Russian-only. The English generator uses NLTK's `WordNetLemmatizer` with a POS hint from NLTK's perceptron tagger. `get_lemma_en(word)` mirrors `get_lemma(word)` in the Russian generator: it produces the canonical base form for the word's estimated POS, and `generate_level()` skips any word where `get_lemma_en(word) != word`.
+pymorphy3 is Russian-only. The English generator uses spaCy's `en_core_web_sm` model for both lemmatization and POS tagging. `get_lemma_en(word)` mirrors `get_lemma(word)` in the Russian generator: it returns the canonical base form, and `generate_level()` skips any word where `get_lemma_en(word) != word`.
 
-**Why single-POS, not all-POS:** An earlier implementation used an all-POS check (reject if ANY POS lemmatizer changes the word). This is over-conservative: "left" (a valid adjective lemma) would be rejected because verb lemmatisation reduces it to "leave". Using the tagger's estimated POS keeps valid lemmas that coincidentally happen to be inflected forms for a different POS.
+**POS filters:** Proper nouns (`PROPN`) are dropped entirely. Function words (`ADP`, `PRON`, `CCONJ`, `SCONJ`, `DET`, `INTJ`, `PART`) are routed to `tooCommon` — see D15.
 
-**Known limitation of single-POS:** NLTK's perceptron tagger defaults to `NN` when uncertain on isolated words (no sentence context). A small number of inflected verb forms may be tagged as NN and pass through (e.g. "running" tagged as NN: `lemmatize("running", "n")` = "running"). In practice this is rare — hunspell accepts these words, so they appear as minor extra entries rather than causing crashes. The frequency list is large enough that genuine lemmas dominate.
+**Why spaCy over NLTK:** NLTK's perceptron tagger was the original choice (convenience — low setup barrier, familiar API). Its critical limitation: it was trained on full sentences and defaults to `NN` on isolated words, meaning `PROPER_NOUN_TAGS` and `PREPOSITION_TAGS` filters almost never fired in practice. The hunspell gate and manual blocklist were compensating for a tool deficiency. spaCy tags isolated words reliably using Universal Dependencies, making the function word filter work as designed and shrinking `function_words_en.txt` to a true edge-case safety net rather than a manual patch list.
 
-**POS filters:** Proper nouns (`NNP`/`NNPS` tags) and prepositions (`IN` tag) are removed. Note: NLTK tagging of isolated lowercase words almost never returns `NNP`, so the hunspell gate and blocklist do most proper-noun rejection in practice.
+**Why spaCy over stanza:** stanza's neural models are more accurate on benchmarks but significantly slower (minutes vs. seconds for the global vocabulary cache build in `calibrate_en.py`). For the English generator's use case — offline batch processing of ~20 source words — spaCy's accuracy is sufficient and the speed difference matters for development iteration.
 
 **Frequency list:** `tools/level_generator/en_freq.txt` — hermitdave English OpenSubtitles 2018 full list (same project as Russian, MIT licence). The English loader deduplicates by keeping the highest-count entry if a word appears twice (an edge case absent in the Russian list).
 
@@ -195,4 +195,23 @@ pymorphy3 is Russian-only. The English generator uses NLTK's `WordNetLemmatizer`
 
 **Calibration tool:** `tools/level_generator/calibrate_en.py` — run with `python calibrate_en.py` to score all source words against all 5 profiles. Re-run when adding source words, adjusting profiles, or replacing TODO source words.
 
-**Bootstrap:** Run `python bootstrap.py` once after `pip install -r requirements.txt` to download NLTK corpora (`wordnet`, `averaged_perceptron_tagger_eng`) and verify both hunspell dictionaries are available.
+**Bootstrap:** Run `python bootstrap.py` once after `pip install -r requirements.txt` to download the spaCy `en_core_web_sm` model and verify both hunspell dictionaries are available.
+
+---
+
+## D15 — Function word POS filter as an additional tooCommon axis (refines D10, D13)
+
+**Decision:** Both generators route grammatical function words to `tooCommon` based on POS, independently of the `max_freq` frequency threshold. `tooCommon` is now determined by two axes:
+1. **POS-based:** words whose POS is in `FUNCTION_WORD_POS` / `FUNCTION_WORD_POS` (or listed in `function_words_ru.txt` / `function_words_en.txt` for mislabelled edge cases) → `tooCommon`
+2. **Frequency-based:** content words at or above `max_freq` for the current profile → `tooCommon`
+
+Russian `FUNCTION_WORD_POS`: `{'PREP', 'NPRO', 'CONJ', 'PRCL', 'INTJ', 'PRED'}`
+English `FUNCTION_WORD_POS`: `{'ADP', 'PRON', 'CCONJ', 'SCONJ', 'DET', 'INTJ', 'PART'}`
+
+**Why:** The raw subtitle corpus frequency cuts through good vocabulary — content words like год, утро, друг appear very frequently in dialogue and were being filtered as `tooCommon` purely by count, while genuine function words (pronouns, conjunctions, particles) at a specific frequency range could land in `required` or `bonus`. POS-based filtering correctly identifies these regardless of corpus frequency: a pronoun is a function word whether it appears 5,000 or 500,000 times.
+
+**Why keep `max_freq` too:** Without the frequency ceiling, extremely common content words (e.g. год at beginner difficulty) would pass into `required` even when they're too simple for the level. The two axes are complementary: POS catches function words that frequency misses; frequency catches over-common content words that POS misses.
+
+**Note on recalibration:** Adding the POS filter changes which words reach the frequency classification step. Profile `max_freq` values should be re-evaluated with `calibrate_ru.py` / `calibrate_en.py` after this change is applied, since function words that previously consumed `tooCommon` slots via frequency are now caught earlier by POS.
+
+**Impact:** Both generators now load `function_words_ru.txt` / `function_words_en.txt` at startup. The previous silent PREP drop in `generate_ru.py` is replaced by routing to `tooCommon`. `calibrate_ru.py` and `calibrate_en.py` updated to skip function words when building candidate sets.

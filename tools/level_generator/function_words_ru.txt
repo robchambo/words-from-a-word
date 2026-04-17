@@ -1,0 +1,13 @@
+# Explicit function words for the Russian level generator.
+# Supplements FUNCTION_WORD_POS in generate_ru.py for edge cases where
+# pymorphy3 assigns an unexpected POS tag to a word that is semantically
+# a function word (e.g. an archaic particle tagged as NOUN by OpenCorpora).
+#
+# One word per line, lowercase. Lines starting with # are ignored.
+# The generator lemma-checks all words before this point, so entries here
+# should be lemma forms.
+#
+# Most Russian function words are reliably caught by FUNCTION_WORD_POS
+# (PREP, NPRO, CONJ, PRCL, INTJ, PRED). Add to this file only when you
+# observe a function word appearing in required or bonus during generation
+# review and confirm pymorphy3 is tagging it incorrectly.

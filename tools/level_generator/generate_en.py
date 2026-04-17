@@ -40,8 +40,7 @@ import re
 import sys
 from collections import namedtuple
 import enchant
-from nltk.stem import WordNetLemmatizer
-from nltk import pos_tag
+import spacy
 
 # UTF-8 stdout wrap is applied inside main() so importing this module
 # (e.g. from tests or calibration) does not clobber sys.stdout.
@@ -98,6 +97,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.join(SCRIPT_DIR, '..', '..')
 FREQ_FILE = os.path.join(SCRIPT_DIR, 'en_freq.txt')
 BLOCKLIST_FILE = os.path.join(SCRIPT_DIR, 'blocklist_en.txt')
+FUNCTION_WORDS_FILE = os.path.join(SCRIPT_DIR, 'function_words_en.txt')
 OUTPUT_FILE = os.path.join(REPO_ROOT, 'assets', 'data', 'english_levels.json')
 
 # ---------------------------------------------------------------------------
@@ -126,6 +126,21 @@ def load_freq(path):
 # Load blocklist — section-aware (mirrors Russian generator)
 # ---------------------------------------------------------------------------
 Blocklists = namedtuple('Blocklists', ['noise', 'profanity'])
+
+def load_function_words(path):
+    """
+    Returns a set of lowercase word strings from function_words_en.txt.
+    Lines starting with # are comments. Missing file returns empty set.
+    """
+    if not os.path.exists(path):
+        return set()
+    words = set()
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                words.add(line.lower())
+    return words
 
 def load_blocklist(path):
     """
@@ -171,64 +186,51 @@ def can_form(word, source_counts):
 hunspell = enchant.Dict('en_US')
 
 # ---------------------------------------------------------------------------
-# Lemmatization — NLTK WordNet
+# spaCy English model — lemmatization and POS tagging.
 #
-# Mirrors get_lemma() in the Russian generator: produce the canonical base
-# form and keep only words where get_lemma_en(word) == word, so inflected
-# forms (plurals, conjugations, comparatives) are skipped and their lemma is
-# processed separately when it appears in the frequency list.
+# Replaces NLTK for both tasks. spaCy tags isolated words reliably using
+# Universal Dependencies (UD) tags, unlike NLTK's perceptron tagger which
+# defaults to NN on isolated words (no sentence context).
 #
-# POS is estimated with NLTK's perceptron tagger. Isolated-word tagging is
-# less reliable than sentence-context tagging (defaults to NN when uncertain),
-# but in practice this causes very few errors: the frequency list is large
-# enough that genuine lemmas outnumber edge-case inflections, and any
-# inflection that does slip through is still a real English word accepted by
-# hunspell — it causes no crash and appears as a minor aesthetic imperfection.
-#
-# Why NOT the stricter all-POS check (is_base_form)?
-# Checking all 4 POS is over-conservative: "left" (a valid adjective lemma)
-# would be rejected because verb lemmatisation changes it to "leave". Using
-# the estimated POS keeps valid lemmas that happen to be inflected forms for
-# a different POS.
+# parser and ner are disabled — we only need tagger + lemmatizer.
 # ---------------------------------------------------------------------------
-_lemmatizer = WordNetLemmatizer()
-
-# NLTK tag prefix → WordNet POS
-_NLTK_TO_WN = {'NN': 'n', 'VB': 'v', 'JJ': 'a', 'RB': 'r'}
+nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
 
 def get_lemma_en(word):
     """
-    Returns the canonical base form (lemma) for an English word.
+    Returns the canonical base form (lemma) for an English word using spaCy.
 
-    Uses NLTK's perceptron tagger to estimate POS, then WordNetLemmatizer to
-    produce the lemma for that POS. Only words where get_lemma_en(word) == word
-    are kept by generate_level() — all others are inflected forms whose lemma
-    will appear separately in the frequency list.
+    Mirrors get_lemma() in the Russian generator: only words where
+    get_lemma_en(word) == word are kept by generate_level() — all others
+    are inflected forms whose lemma appears separately in the frequency list.
     """
-    w = word.lower()
-    raw_tag = pos_tag([w])[0][1][:2]
-    wn_pos = _NLTK_TO_WN.get(raw_tag, 'n')
-    return _lemmatizer.lemmatize(w, wn_pos)
+    return nlp(word.lower())[0].lemma_
 
 # ---------------------------------------------------------------------------
-# POS-based filters via NLTK perceptron tagger.
-#
-# NLTK's perceptron tagger is unreliable on isolated words (it has no
-# sentence context) and tends to default to 'NN'. So:
-#   - Proper nouns (NNP/NNPS): tagging an isolated lowercase string almost
-#     never returns NNP, so this filter mostly relies on the hunspell gate
-#     and the blocklist for proper-noun rejection.
-#   - Prepositions (IN): more reliable for short common words like "for",
-#     "from", "off". The MIN_WORD_LENGTH=3 floor already removes most.
-#
-# The hunspell gate does most of the heavy lifting; this is a thin extra pass.
+# POS-based filters — Universal Dependencies tags from spaCy.
 # ---------------------------------------------------------------------------
-PROPER_NOUN_TAGS = {'NNP', 'NNPS'}
-PREPOSITION_TAGS = {'IN'}
+
+# Proper nouns — filtered out entirely (not general vocabulary).
+PROPER_NOUN_TAGS = {'PROPN'}
+
+# Function word UD tags — routed to tooCommon. Mirrors FUNCTION_WORD_POS
+# in generate_ru.py. See docs/DECISIONS.md D15.
+#   ADP   — adpositions (prepositions: in, of, for)
+#   PRON  — pronouns (he, she, it, they)
+#   CCONJ — coordinating conjunctions (and, but, or)
+#   SCONJ — subordinating conjunctions (if, because, although)
+#   DET   — determiners (the, a, an, this)
+#   INTJ  — interjections (oh, wow, hey)
+#   PART  — particles (not, 's, to as infinitive marker)
+FUNCTION_WORD_POS = {'ADP', 'PRON', 'CCONJ', 'SCONJ', 'DET', 'INTJ', 'PART'}
+
+# Explicit function words list — supplements FUNCTION_WORD_POS for edge
+# cases where spaCy assigns an unexpected tag on isolated words.
+FUNCTION_WORDS = load_function_words(FUNCTION_WORDS_FILE)
 
 def get_tag(word):
-    """Returns the NLTK POS tag for an isolated word."""
-    return pos_tag([word])[0][1]
+    """Returns the spaCy Universal Dependencies POS tag for a word."""
+    return nlp(word.lower())[0].pos_
 
 # ---------------------------------------------------------------------------
 # Core generator
@@ -274,9 +276,15 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
         if word in excluded:
             continue
 
-        # POS filter: drop proper nouns + prepositions.
+        # Drop proper nouns entirely — not general vocabulary.
         tag = get_tag(word)
-        if tag in PROPER_NOUN_TAGS or tag in PREPOSITION_TAGS:
+        if tag in PROPER_NOUN_TAGS:
+            continue
+
+        # Route function words to tooCommon so the player sees "too common"
+        # feedback when they enter one. See docs/DECISIONS.md D15.
+        if tag in FUNCTION_WORD_POS or word in FUNCTION_WORDS:
+            too_common.append(word)
             continue
 
         if word in blocklists.noise:
@@ -323,101 +331,97 @@ def make_level(source_word, profile_name, freq, blocklists, overrides_excluded=N
 # ---------------------------------------------------------------------------
 # Per-level functions — named level_{tier}_{index} where tier is the
 # difficulty number (1=beginner … 5=expert) and index restarts at 1 per tier.
-# Profile assignments calibrated by calibrate_en.py against each source
-# word's vocabulary density.
+# Profile assignments verified by calibrate_en.py against global vocabulary.
 # ---------------------------------------------------------------------------
 
 # --- Tier 1: P1_BEGINNER ---
 
 def level_1_1(freq, blocklists):
-    # breakfast — P1_BEGINNER (~10 required)
+    # breakfast — P1_BEGINNER (~8 required)
     return make_level("breakfast", 'P1_BEGINNER', freq, blocklists)
 
 def level_1_2(freq, blocklists):
-    # adventure — P1_BEGINNER (~11 required)
-    return make_level("adventure", 'P1_BEGINNER', freq, blocklists)
-
-def level_1_3(freq, blocklists):
-    # waterfall — P1_BEGINNER (~8 required)
+    # waterfall — P1_BEGINNER (~7 required)
     return make_level("waterfall", 'P1_BEGINNER', freq, blocklists)
 
-def level_1_4(freq, blocklists):
-    # basketball — P1_BEGINNER (~8 required)
-    return make_level("basketball", 'P1_BEGINNER', freq, blocklists)
-
-def level_1_5(freq, blocklists):
+def level_1_3(freq, blocklists):
     # chemistry — P1_BEGINNER (~8 required)
     return make_level("chemistry", 'P1_BEGINNER', freq, blocklists)
 
-def level_1_6(freq, blocklists):
-    # strawberry — TODO: source word too rich; ~14 required at strictest profile (target 7-13).
-    # Consider replacing with a sparser source word.
+def level_1_4(freq, blocklists):
+    # adventure — P1_BEGINNER (~11 required)
+    return make_level("adventure", 'P1_BEGINNER', freq, blocklists)
+
+def level_1_5(freq, blocklists):
+    # strawberry — P1_BEGINNER (~10 required)
     return make_level("strawberry", 'P1_BEGINNER', freq, blocklists)
-
-def level_1_7(freq, blocklists):
-    # thunderstorm — TODO: source word too rich; ~18 required at strictest profile (target 7-13).
-    # Consider replacing with a sparser source word.
-    return make_level("thunderstorm", 'P1_BEGINNER', freq, blocklists)
-
-def level_1_8(freq, blocklists):
-    # playground — TODO: source word too rich; ~16 required at strictest profile (target 7-13).
-    # Consider replacing with a sparser source word.
-    return make_level("playground", 'P1_BEGINNER', freq, blocklists)
 
 # --- Tier 2: P2_EASY ---
 
 def level_2_1(freq, blocklists):
-    # carpenter — P2_EASY (~11 required)
-    return make_level("carpenter", 'P2_EASY', freq, blocklists)
-
-def level_2_2(freq, blocklists):
-    # chocolate — P2_EASY (~11 required)
-    return make_level("chocolate", 'P2_EASY', freq, blocklists)
-
-def level_2_3(freq, blocklists):
-    # blackboard — P2_EASY (~11 required)
-    return make_level("blackboard", 'P2_EASY', freq, blocklists)
-
-def level_2_4(freq, blocklists):
     # landscape — P2_EASY (~7 required)
     return make_level("landscape", 'P2_EASY', freq, blocklists)
 
-def level_2_5(freq, blocklists):
+def level_2_2(freq, blocklists):
     # springtime — P2_EASY (~10 required)
     return make_level("springtime", 'P2_EASY', freq, blocklists)
 
+def level_2_3(freq, blocklists):
+    # chocolate — P2_EASY (~10 required)
+    return make_level("chocolate", 'P2_EASY', freq, blocklists)
+
+def level_2_4(freq, blocklists):
+    # carpenter — P2_EASY (~11 required)
+    return make_level("carpenter", 'P2_EASY', freq, blocklists)
+
+def level_2_5(freq, blocklists):
+    # basketball — P2_EASY (~12 required)
+    return make_level("basketball", 'P2_EASY', freq, blocklists)
+
 def level_2_6(freq, blocklists):
-    # pineapple — TODO: source word slightly sparse; ~6 required at this profile (target 7-13).
-    # Falls between P2 and P3 — neither lands in band.
-    return make_level("pineapple", 'P2_EASY', freq, blocklists)
+    # playground — P2_EASY (~12 required)
+    return make_level("playground", 'P2_EASY', freq, blocklists)
+
+def level_2_7(freq, blocklists):
+    # thunderstorm — TODO: source word too rich; ~16 required at best-fit profile (target 7-13).
+    # Consider replacing with a sparser source word.
+    return make_level("thunderstorm", 'P2_EASY', freq, blocklists)
 
 # --- Tier 3: P3_MEDIUM ---
 
 def level_3_1(freq, blocklists):
-    # mountains — P3_MEDIUM (~12 required)
-    return make_level("mountains", 'P3_MEDIUM', freq, blocklists)
-
-def level_3_2(freq, blocklists):
-    # telephone — P3_MEDIUM (~13 required)
+    # telephone — P3_MEDIUM (~8 required)
     return make_level("telephone", 'P3_MEDIUM', freq, blocklists)
 
+def level_3_2(freq, blocklists):
+    # mountains — P3_MEDIUM (~8 required)
+    return make_level("mountains", 'P3_MEDIUM', freq, blocklists)
+
 def level_3_3(freq, blocklists):
-    # butterfly — P3_MEDIUM (~8 required)
-    return make_level("butterfly", 'P3_MEDIUM', freq, blocklists)
+    # pineapple — P3_MEDIUM (~10 required)
+    return make_level("pineapple", 'P3_MEDIUM', freq, blocklists)
 
 def level_3_4(freq, blocklists):
-    # classroom — P3_MEDIUM (~10 required)
-    return make_level("classroom", 'P3_MEDIUM', freq, blocklists)
+    # blackboard — P3_MEDIUM (~12 required)
+    return make_level("blackboard", 'P3_MEDIUM', freq, blocklists)
 
 def level_3_5(freq, blocklists):
-    # newspaper — TODO: source word slightly rich; ~14 required at this profile (target 7-13).
+    # newspaper — P3_MEDIUM (~13 required)
     return make_level("newspaper", 'P3_MEDIUM', freq, blocklists)
 
 # --- Tier 4: P4_HARD ---
 
 def level_4_1(freq, blocklists):
-    # fireworks — P4_HARD (~10 required)
+    # fireworks — P4_HARD (~9 required)
     return make_level("fireworks", 'P4_HARD', freq, blocklists)
+
+def level_4_2(freq, blocklists):
+    # classroom — P4_HARD (~11 required)
+    return make_level("classroom", 'P4_HARD', freq, blocklists)
+
+def level_4_3(freq, blocklists):
+    # butterfly — P4_HARD (~12 required)
+    return make_level("butterfly", 'P4_HARD', freq, blocklists)
 
 # --- Tier 5: P5_EXPERT ---
 # (No source word currently calibrates to P5_EXPERT.)
@@ -427,11 +431,10 @@ def level_4_1(freq, blocklists):
 # main() stamps difficulty and levelNumber automatically from the profile.
 # ---------------------------------------------------------------------------
 LEVELS = [
-    level_1_1, level_1_2, level_1_3, level_1_4,
-    level_1_5, level_1_6, level_1_7, level_1_8,
-    level_2_1, level_2_2, level_2_3, level_2_4, level_2_5, level_2_6,
+    level_1_1, level_1_2, level_1_3, level_1_4, level_1_5,
+    level_2_1, level_2_2, level_2_3, level_2_4, level_2_5, level_2_6, level_2_7,
     level_3_1, level_3_2, level_3_3, level_3_4, level_3_5,
-    level_4_1,
+    level_4_1, level_4_2, level_4_3,
 ]
 
 # ---------------------------------------------------------------------------
