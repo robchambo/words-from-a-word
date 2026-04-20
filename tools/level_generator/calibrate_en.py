@@ -11,16 +11,23 @@ Two-phase tool — mirrors calibrate_ru.py for English.
     runs load from cache in seconds.
 
     After building the cache, prints vocabulary frequency distribution
-    statistics and suggests freq_threshold percentile cutoffs for stable
-    PROFILES values in generate_en.py.
+    statistics and verifies freq_threshold percentile cutoffs for PROFILES
+    in generate_en.py.
 
   Phase 2 — Source word evaluation
-    For each source word, filters the global vocab cache to words formable
-    from that source word's letters, then counts how many would be required
-    under each profile. Prints a required-word count table.
+    For each source word, computes required words at every profile and finds
+    the eligible profiles — those where required count falls in [COUNT_MIN,
+    COUNT_MAX]. For each eligible profile the required word list and its
+    median frequency are shown.
 
-    Target: each source word should land 7–13 required words at its
-    assigned profile (best-fit closest to 10).
+    Suggested assignment: for ambiguous words (eligible at multiple profiles),
+    the suggestion uses log-scale median distance to targets derived from
+    unambiguous and manually assigned words.
+
+    Manual assignments are stored in manual_assignments_en.json and are never
+    overwritten by the calibrator. Edit that file directly after reviewing the
+    output. The calibrator flags words with no manual assignment yet and warns
+    if a manual assignment has drifted out of the eligible range.
 
 Usage:
     python calibrate_en.py              # load cache if present, else build it
@@ -37,12 +44,19 @@ See calibrate_ru.py for the equivalent Russian tool.
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
+import io
 import generate_en as g
 
-CACHE_FILE = os.path.join(g.SCRIPT_DIR, 'vocab_cache_en.json')
+CACHE_FILE  = os.path.join(g.SCRIPT_DIR, 'vocab_cache_en.json')
+MANUAL_FILE = os.path.join(g.SCRIPT_DIR, 'manual_assignments_en.json')
+
+# Eligible profile band: required word count must fall in [COUNT_MIN, COUNT_MAX].
+COUNT_MIN = 5
+COUNT_MAX = 15
 
 SOURCE_WORDS = [
     "strawberry", "carpenter", "chocolate", "mountains", "blackboard",
@@ -122,10 +136,22 @@ def load_or_build_vocab(freq, blocklists, force_rebuild=False):
 # Phase 1 output — frequency distribution stats
 # ---------------------------------------------------------------------------
 
+def compute_threshold_at_percentile(vocab, top_pct):
+    """
+    Returns the freq_threshold corresponding to the top N% of the global vocab.
+    E.g. top_pct=5 → returns the count such that 5% of lemmas are above it.
+    """
+    counts = sorted((c for _, c in vocab), reverse=True)
+    n = len(counts)
+    idx = int((top_pct / 100) * n)
+    idx = min(idx, n - 1)
+    return counts[idx]
+
+
 def print_distribution_stats(vocab):
     """
-    Prints frequency distribution of the global vocab and suggests
-    freq_threshold cutoffs at key percentile points.
+    Prints frequency distribution of the global vocab and the corpus-anchored
+    freq_threshold values used in PROFILES (top 1/5/10/15/20% cutoffs).
     """
     if not vocab:
         return
@@ -146,87 +172,181 @@ def print_distribution_stats(vocab):
         print(f"  top {100-p:2d}% (p{p:2d}): count >= {cutoff:>8,}  "
               f"({int(p/100 * n):,} words above)")
     print()
-    print("Suggested freq_threshold values (words BELOW this go to bonus):")
-    for p in [10, 20, 30, 40, 50]:
-        idx = int((p / 100) * n)
-        idx = max(0, min(idx, n - 1))
-        cutoff = counts[-(idx+1)] if idx < n else counts[-1]
-        print(f"  bottom {p:2d}% → freq_threshold ~{cutoff:>8,}")
+    print("Corpus-anchored freq_threshold values (used in PROFILES):")
+    # P1_BEGINNER uses top 1% for English (vs top 2% for Russian) — see D16.
+    profile_pcts = [('P1_BEGINNER', 1), ('P2_EASY', 5), ('P3_MEDIUM', 10),
+                    ('P4_HARD', 15), ('P5_EXPERT', 20)]
+    for profile, pct in profile_pcts:
+        threshold = compute_threshold_at_percentile(vocab, pct)
+        current = g.PROFILES[profile]['freq_threshold']
+        match = "✓" if abs(current - threshold) / max(threshold, 1) < 0.1 else f"(current: {current:,})"
+        print(f"  {profile:<14} top {pct:2d}%  →  freq_threshold >= {threshold:>8,}  {match}")
 
 
 # ---------------------------------------------------------------------------
 # Phase 2 — source word evaluation
 # ---------------------------------------------------------------------------
 
-def build_candidates_from_vocab(source_word, vocab):
+def load_manual():
+    """Loads manual profile assignments from MANUAL_FILE. Returns {} if absent."""
+    if not os.path.exists(MANUAL_FILE):
+        return {}
+    with open(MANUAL_FILE, encoding='utf-8') as f:
+        return json.load(f)
+
+
+def get_required(source_word, vocab, profile):
     """
-    Filters the global vocab to words formable from source_word's letters
-    and shorter than source_word. Returns list of (word, count).
+    Returns list of (word, count) required under the given profile for this
+    source word, sorted by count descending.
     """
-    src_counts = g.letter_counts(source_word.lower())
-    src_len = len(source_word)
-    return [
-        (word, count) for word, count in vocab
-        if len(word) < src_len and g.can_form(word, src_counts)
-    ]
+    pr = g.PROFILES[profile]
+    sc = g.letter_counts(source_word.lower())
+    words = [(w, c) for w, c in vocab
+             if len(w) < len(source_word) and g.can_form(w, sc)
+             and pr['min_length'] <= len(w) <= pr['max_length']
+             and c >= pr['freq_threshold']]
+    words.sort(key=lambda x: x[1], reverse=True)
+    return words
 
 
-def count_required(candidates, max_length, freq_threshold, max_freq):
-    """Count words that would be classified as required under a profile."""
-    n = 0
-    for word, count in candidates:
-        if count >= max_freq:
-            continue
-        if len(word) <= max_length and count >= freq_threshold:
-            n += 1
-    return n
+def median_of(word_count_pairs):
+    """Returns median corpus frequency of a list of (word, count) pairs."""
+    if not word_count_pairs:
+        return 0
+    counts = sorted(c for _, c in word_count_pairs)
+    n = len(counts)
+    mid = n // 2
+    return counts[mid] if n % 2 else (counts[mid - 1] + counts[mid]) // 2
 
 
-def print_source_word_table(vocab):
-    print("Building candidate sets from global vocab...")
-    t0 = time.time()
-    candidates_by_src = {}
+def geo_mean(values):
+    if not values:
+        return None
+    return math.exp(sum(math.log(max(v, 1)) for v in values) / len(values))
+
+
+def compute_targets(all_required, all_eligible, manual):
+    """
+    Computes median-based suggestion targets per profile from unambiguous
+    assignments (only one eligible profile) and confirmed manual assignments.
+    Ambiguous words without a manual assignment do not contribute.
+    """
+    pools = {p: [] for p in PROFILE_ORDER}
     for src in SOURCE_WORDS:
-        cands = build_candidates_from_vocab(src, vocab)
-        candidates_by_src[src] = cands
-        print(f"  {src:<14} {len(cands):>4} candidates")
+        el = all_eligible[src]
+        anchor = None
+        if len(el) == 1:
+            anchor = el[0]
+        elif manual.get(src) in el:
+            anchor = manual[src]
+        if anchor:
+            pools[anchor].append(median_of(all_required[src][anchor]))
+    return {p: geo_mean(pools[p]) for p in PROFILE_ORDER}
+
+
+def suggest_profile(eligible, all_required_for_src, targets):
+    """
+    Among eligible profiles, returns the one whose required-word median is
+    closest (log-scale) to the computed target for that profile.
+    Falls back to the first eligible profile if no targets are set.
+    """
+    set_p = [p for p in eligible if targets.get(p) is not None]
+    if not set_p:
+        return eligible[0]
+
+    def log_dist(p):
+        med = median_of(all_required_for_src[p])
+        return abs(math.log(max(med, 1)) - math.log(max(targets[p], 1)))
+
+    return min(set_p, key=lambda p: (log_dist(p), PROFILE_ORDER.index(p)))
+
+
+def print_source_word_detail(vocab, manual):
+    print("\nBuilding required word sets...")
+    t0 = time.time()
+
+    all_required = {}
+    all_eligible = {}
+    for src in SOURCE_WORDS:
+        req = {p: get_required(src, vocab, p) for p in PROFILE_ORDER}
+        all_required[src] = req
+        all_eligible[src] = [p for p in PROFILE_ORDER
+                              if COUNT_MIN <= len(req[p]) <= COUNT_MAX]
     print(f"  ({time.time()-t0:.1f}s)")
 
-    print()
-    header = f"{'source word':<14} " + " ".join(f"{p[3:6]:>5}" for p in PROFILE_ORDER) + "   best fit"
-    print(header)
-    print("-" * len(header))
+    targets = compute_targets(all_required, all_eligible, manual)
 
-    assignments = {}
-    band_counts = {p: 0 for p in PROFILE_ORDER}
-    in_band_total = 0
+    print()
+    print(f"Suggestion targets (from unambiguous + manual anchors):")
+    for p in PROFILE_ORDER:
+        t = targets[p]
+        print(f"  {p:<14}  {f'{t:,.0f}' if t else 'none (no anchor words yet)'}")
 
     for src in SOURCE_WORDS:
-        cands = candidates_by_src[src]
-        counts_per_profile = {
-            p: count_required(cands, **g.PROFILES[p]) for p in PROFILE_ORDER
-        }
-        best = min(PROFILE_ORDER,
-                   key=lambda p: (abs(counts_per_profile[p] - 10), PROFILE_ORDER.index(p)))
-        assignments[src] = (best, counts_per_profile[best])
-        band_counts[best] += 1
-        if 7 <= counts_per_profile[best] <= 13:
-            in_band_total += 1
+        req      = all_required[src]
+        eligible = all_eligible[src]
+        man      = manual.get(src)
+        sug      = suggest_profile(eligible, req, targets) if eligible else None
 
-        cells = " ".join(f"{counts_per_profile[p]:>5}" for p in PROFILE_ORDER)
-        in_band = "OK" if 7 <= counts_per_profile[best] <= 13 else "--"
-        print(f"{src:<14} {cells}   {best} ({counts_per_profile[best]}) {in_band}")
+        print(f"\n{'─' * 64}")
+        print(f"  {src}")
+        print(f"{'─' * 64}")
 
+        for p in PROFILE_ORDER:
+            words = req[p]
+            n     = len(words)
+            in_el = p in eligible
+
+            tags = []
+            if p == sug:
+                tags.append("SUGGESTED")
+            if p == man:
+                tags.append("MANUAL ✓" if in_el else "MANUAL ⚠ out of range")
+            tag_str = f"  [{' | '.join(tags)}]" if tags else ""
+
+            if in_el or p == man:
+                med = median_of(words)
+                pr  = g.PROFILES[p]
+                print(f"\n  {p}  ({n} words, ft={pr['freq_threshold']:,}, "
+                      f"len {pr['min_length']}–{pr['max_length']}, median {med:,}){tag_str}")
+                print("    " + "  ".join(f"{w}({c:,})" for w, c in words))
+            else:
+                reason = "too few" if n < COUNT_MIN else "too many"
+                print(f"  {p:<14}  {n} words — {reason}")
+
+        if not eligible:
+            print("\n  !! No eligible profile — needs replacement")
+        elif not man:
+            print(f"\n  → Awaiting manual assignment. Suggested: {sug}")
+
+    # Summary
+    no_eligible  = [s for s in SOURCE_WORDS if not all_eligible[s]]
+    out_of_range = [s for s in SOURCE_WORDS
+                    if manual.get(s) and manual[s] not in all_eligible.get(s, [])]
+    pending      = [s for s in SOURCE_WORDS
+                    if s not in manual and all_eligible.get(s)]
+
+    print(f"\n{'=' * 64}")
+    print(f"Summary: {len(SOURCE_WORDS)} source words  |  "
+          f"{len(manual)} manual  |  {len(pending)} pending")
+    if no_eligible:
+        print(f"\n  ✗ No eligible profile (replace these):")
+        for s in no_eligible:
+            counts_str = "  ".join(f"{p[3:6]}={len(all_required[s][p])}"
+                                   for p in PROFILE_ORDER)
+            print(f"    {s:<16}  {counts_str}")
+    if out_of_range:
+        print(f"\n  ⚠ Manual assignment out of range:")
+        for s in out_of_range:
+            el_str = ", ".join(all_eligible[s]) or "none"
+            print(f"    {s:<16}  manual={manual[s]}  eligible=[{el_str}]")
+    if pending:
+        print(f"\n  Pending manual assignments:")
+        for s in pending:
+            sug = suggest_profile(all_eligible[s], all_required[s], targets)
+            print(f"    {s:<16}  suggested: {sug}")
     print()
-    print(f"In band (7-13 required words): {in_band_total} / {len(SOURCE_WORDS)}")
-    print()
-    print("Profile distribution:")
-    for p in PROFILE_ORDER:
-        print(f"  {p}: {band_counts[p]} levels")
-    print()
-    print("Suggested level function profile assignments:")
-    for src, (profile, count) in assignments.items():
-        print(f"    level_{src}: '{profile}'  # {count} required")
 
 
 # ---------------------------------------------------------------------------
@@ -239,16 +359,16 @@ def main():
                         help='Force rebuild the global vocab cache.')
     args = parser.parse_args()
 
-    freq = g.load_freq(g.FREQ_FILE)
+    freq       = g.load_freq(g.FREQ_FILE)
     blocklists = g.load_blocklist(g.BLOCKLIST_FILE)
+    manual     = load_manual()
 
     vocab = load_or_build_vocab(freq, blocklists, force_rebuild=args.rebuild)
 
     print_distribution_stats(vocab)
-    print_source_word_table(vocab)
+    print_source_word_detail(vocab, manual)
 
 
 if __name__ == '__main__':
-    import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     main()

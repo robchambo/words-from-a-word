@@ -21,8 +21,9 @@
 # Abbreviations
 мес
 
-# Particles / archaic conjunctions
+# Particles / archaic conjunctions / interjections
 сем
+тсс
 
 # Sports / entertainment loanwords
 аут

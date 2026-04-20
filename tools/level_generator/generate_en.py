@@ -1,7 +1,7 @@
 """
 English level generator for Слова из Слова.
 
-Mirrors generate.py (Russian) with English-specific morphology and quality gate.
+Mirrors generate_ru.py with English-specific morphology and quality gate.
 For each source word, produces required, bonus, too_common, and blocked word
 lists, writing the result to assets/data/english_levels.json.
 
@@ -20,11 +20,15 @@ Word quality gate:
 
 Word classification (applied after the quality gate):
     required   — base form, formable from source letters,
-                 length <= max_length, freq_threshold <= count < max_freq
-    bonus      — base form, formable from source letters,
-                 length > max_length OR count < freq_threshold
-    too_common — base form, formable from source letters, count >= max_freq
+                 min_length <= length <= max_length, frequency >= freq_threshold
+    bonus      — base form, formable from source letters, everything else
+                 (too short for required, too long, or too rare)
+    too_common — function words (prepositions, pronouns, conjunctions, etc.)
     blocked    — admitted by hunspell but on the noise blocklist (tracked for review)
+
+Difficulty is determined by the median corpus frequency of the source word's
+formable content words within the profile's length window. See calibrate_en.py
+and docs/DECISIONS.md D16.
 
 Only base/lemma forms are kept; non-base inflections are skipped because their
 lemma will appear in the frequency list separately.
@@ -52,34 +56,43 @@ MIN_WORD_LENGTH = 3
 
 # ---------------------------------------------------------------------------
 # Difficulty profiles — mirror the Russian generator's five-profile scheme.
-# Values below are CALIBRATED for English (OpenSubtitles 2018 frequency).
-# English vocabulary density is significantly higher than Russian, so the
-# frequency thresholds are an order of magnitude stricter than Russian's.
+# Values below are calibrated for English (OpenSubtitles 2018 frequency).
 #
-#   Profile        ft       mf       ml    Notes
-#   P1_BEGINNER  80000   500000     4     Most common short words only
-#   P2_EASY      30000   200000     4     Common 4-letter vocabulary
-#   P3_MEDIUM    10000    80000     5     Broader vocabulary, up to 5 letters
-#   P4_HARD       3000    30000     5     Less common words, up to 5 letters
-#   P5_EXPERT      800    15000     6     Rare/literary vocabulary, up to 6 letters
+# Profile assignment for each source word is determined by calibrate_en.py,
+# which computes the median corpus frequency of formable content words within
+# the length window and matches it to each profile's median target range.
+# See docs/DECISIONS.md D16.
 #
-# ft = freq_threshold: words below this go to bonus
-# mf = max_freq:       words at or above this go to too_common
-# ml = max_length:     words longer than this go to bonus
+#   Profile        ft      min_l  max_l   Corpus percentile
+#   P1_BEGINNER  84000      3      4     top  1% of valid lemmas (≥84,836)
+#   P2_EASY      10000      3      4     top  5% of valid lemmas (≥9,997)
+#   P3_MEDIUM     3100      3      5     top 10% of valid lemmas (≥3,108)
+#   P4_HARD       1430      4      5     top 15% of valid lemmas (≥1,432)
+#   P5_EXPERT      780      4      6     top 20% of valid lemmas (≥783)
 #
-# Calibrated against the 20 source words; 15/20 land in 7-13 required words
-# at their best-fit profile. The 5 outliers (strawberry, newspaper,
-# thunderstorm, pineapple, playground) are flagged with TODO comments below
-# and use their best-fit profile pending source-word replacement.
-# P5_EXPERT is unused at present — no source word is sparse enough to need
-# its loose thresholds. Retained for future hard source words.
+# ft    = freq_threshold: words below this go to bonus (too rare for required)
+# min_l = min_length:     words shorter than this go to bonus (too short for required)
+# max_l = max_length:     words longer than this go to bonus (too long for required)
+#
+# Thresholds are anchored to percentiles of the global valid-lemma vocabulary
+# (41,025 lemmas after quality gate). Re-derive via calibrate_en.py if the
+# frequency list or quality gate changes significantly.
+#
+# P1_BEGINNER uses top 1% rather than top 2% (as in Russian) because English
+# has far more short, extremely high-frequency content words (run, eat, end,
+# turn, etc.) that inflate required counts at P1. Russian's top-frequency
+# vocabulary is sparser in short formable forms, so top 2% produces reasonable
+# counts there but would cause overflow here. See docs/DECISIONS.md D16.
+#
+# Note: the global MIN_WORD_LENGTH = 3 is the absolute floor applied before
+# any profile filtering. Words below it are silently dropped entirely.
 # ---------------------------------------------------------------------------
 PROFILES = {
-    'P1_BEGINNER': {'freq_threshold': 80000, 'max_freq': 500000, 'max_length': 4},
-    'P2_EASY':     {'freq_threshold': 30000, 'max_freq': 200000, 'max_length': 4},
-    'P3_MEDIUM':   {'freq_threshold': 10000, 'max_freq':  80000, 'max_length': 5},
-    'P4_HARD':     {'freq_threshold':  3000, 'max_freq':  30000, 'max_length': 5},
-    'P5_EXPERT':   {'freq_threshold':   800, 'max_freq':  15000, 'max_length': 6},
+    'P1_BEGINNER': {'freq_threshold': 84000, 'min_length': 3, 'max_length': 4},
+    'P2_EASY':     {'freq_threshold': 10000, 'min_length': 3, 'max_length': 4},
+    'P3_MEDIUM':   {'freq_threshold':  3100, 'min_length': 3, 'max_length': 5},
+    'P4_HARD':     {'freq_threshold':  1430, 'min_length': 4, 'max_length': 5},
+    'P5_EXPERT':   {'freq_threshold':   780, 'min_length': 4, 'max_length': 6},
 }
 
 PROFILE_DIFFICULTY = {
@@ -236,16 +249,15 @@ def get_tag(word):
 # Core generator
 # ---------------------------------------------------------------------------
 def generate_level(source_word, freq, overrides_excluded, blocklists,
-                   min_length=MIN_WORD_LENGTH, max_length=5,
-                   freq_threshold=1000, max_freq=20000):
+                   min_length=3, max_length=5, freq_threshold=10000):
     """
     Generates word lists for a level. Always call with a difficulty profile:
         generate_level(..., **PROFILES['P3_MEDIUM'])
 
-    Classification order:
-      count >= max_freq                                          → too_common
-      len <= max_length AND freq_threshold <= count < max_freq    → required
-      otherwise                                                  → bonus
+    Classification order (after quality gate):
+      tag in FUNCTION_WORD_POS or word in FUNCTION_WORDS → too_common
+      min_length <= len <= max_length AND count >= freq_threshold → required
+      otherwise (too short, too long, or too rare)               → bonus
     """
     src = source_word.lower()
     src_counts = letter_counts(src)
@@ -257,7 +269,7 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
     blocked = []
 
     for word, count in freq.items():
-        if len(word) < min_length or len(word) >= len(src):
+        if len(word) < MIN_WORD_LENGTH or len(word) >= len(src):
             continue
 
         # Cheap formability check first — eliminates the vast majority of words.
@@ -293,9 +305,7 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
         if word in blocklists.profanity:
             continue
 
-        if count >= max_freq:
-            too_common.append(word)
-        elif len(word) <= max_length and count >= freq_threshold:
+        if min_length <= len(word) <= max_length and count >= freq_threshold:
             required.append(word)
         else:
             bonus.append(word)
@@ -311,11 +321,23 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
 # repeat the same 7-line template; here we collapse that into one call so the
 # level functions are one-liners.)
 # ---------------------------------------------------------------------------
-def make_level(source_word, profile_name, freq, blocklists, overrides_excluded=None):
+def make_level(source_word, profile_name, freq, blocklists,
+               overrides_excluded=None, overrides_included=None):
     overrides_excluded = overrides_excluded or []
+    overrides_included = overrides_included or {}
     required, bonus, too_common, blocked = generate_level(
         source_word, freq, overrides_excluded, blocklists,
         **PROFILES[profile_name])
+
+    for word in overrides_included.get('required', []):
+        if word not in required:
+            required.append(word)
+    for word in overrides_included.get('bonus', []):
+        if word not in bonus:
+            bonus.append(word)
+    required.sort(key=lambda w: (len(w), w))
+    bonus.sort(key=lambda w: (len(w), w))
+
     entry = {
         "sourceWord": source_word,
         "profile": profile_name,
@@ -324,8 +346,13 @@ def make_level(source_word, profile_name, freq, blocklists, overrides_excluded=N
         "tooCommon": too_common,
         "blocked": blocked,
     }
+    overrides = {}
     if overrides_excluded:
-        entry["overrides"] = {"excluded": overrides_excluded}
+        overrides["excluded"] = overrides_excluded
+    if overrides_included:
+        overrides["included"] = overrides_included
+    if overrides:
+        entry["overrides"] = overrides
     return entry
 
 # ---------------------------------------------------------------------------
