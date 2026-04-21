@@ -81,4 +81,29 @@ class StringsEn {
   static const String settingsRemoveAds = 'Remove ads';
   static const String settingsRestore = 'Restore purchases';
   static const String settingsPrivacy = 'Privacy policy';
+
+  // Progression
+  static const String homePlay = 'Play';
+  static const String homeLevels = 'Levels';
+  static const String homeTrophies = 'Trophies';
+  static const String homeSettings = 'Settings';
+  static const String lifetimeScoreLabel = 'Lifetime score';
+  static const String streakDaysLabel = 'Day streak';
+
+  static const String levelPickerTitle = 'Levels';
+  static const String levelPickerLocked = 'Locked';
+  static const String levelPickerBestScore = 'Best';
+
+  static const String trophiesTitle = 'Trophies';
+  static const String trophiesLocked = 'Locked';
+  static const String trophiesUnlocked = 'Unlocked';
+
+  static const String libraryCompleteTitle = 'Library complete!';
+  static const String libraryCompleteBody =
+      'You have cleared every level. More are on the way. Replay any level for fun — scores do not update in replay.';
+  static const String libraryCompleteReplay = 'Replay levels';
+  static const String libraryCompleteClose = 'Close';
+
+  static const String replayModeBanner = 'Replay mode — scores not recorded';
+  static const String newBestTag = 'NEW BEST';
 }
