@@ -81,19 +81,24 @@ MIN_WORD_LENGTH = 3
 # (41,025 lemmas after quality gate). Re-derive via calibrate_en.py --rebuild
 # if the frequency list or quality gate changes significantly.
 #
-# Both languages use the same percentile spine (top 2/3/5/8/12%). The raw
+# Both languages use the same percentile spine (top 3/5/7/10/14%). The raw
 # counts differ because the corpora have different densities — percentiles
 # are the stable anchor; raw counts are what those percentiles happen to be.
+#
+# Spine rationale: the shifted spine captures subtitle-underrepresented common
+# words as required at appropriate profiles, and gives ~10-20% more eligible
+# source words per profile. Overlapping length windows chosen over
+# non-overlapping — see docs/DECISIONS.md D16 for full analysis.
 #
 # Note: MIN_WORD_LENGTH = 3 is the absolute floor applied before any profile
 # filtering. Words below it are silently dropped entirely.
 # ---------------------------------------------------------------------------
 PROFILES = {
-    'P1_BEGINNER': {'freq_threshold': 37844, 'min_length': 3, 'max_length': 4, 'percentile':  2},
-    'P2_EASY':     {'freq_threshold': 21042, 'min_length': 3, 'max_length': 5, 'percentile':  3},
-    'P3_MEDIUM':   {'freq_threshold':  9997, 'min_length': 4, 'max_length': 6, 'percentile':  5},
-    'P4_HARD':     {'freq_threshold':  4730, 'min_length': 5, 'max_length': 7, 'percentile':  8},
-    'P5_EXPERT':   {'freq_threshold':  2179, 'min_length': 5, 'max_length': 8, 'percentile': 12},
+    'P1_BEGINNER': {'freq_threshold': 21042, 'min_length': 3, 'max_length': 4, 'percentile':  3},
+    'P2_EASY':     {'freq_threshold':  9997, 'min_length': 3, 'max_length': 5, 'percentile':  5},
+    'P3_MEDIUM':   {'freq_threshold':  5914, 'min_length': 4, 'max_length': 6, 'percentile':  7},
+    'P4_HARD':     {'freq_threshold':  3108, 'min_length': 5, 'max_length': 7, 'percentile': 10},
+    'P5_EXPERT':   {'freq_threshold':  1637, 'min_length': 5, 'max_length': 8, 'percentile': 14},
 }
 
 PROFILE_DIFFICULTY = {

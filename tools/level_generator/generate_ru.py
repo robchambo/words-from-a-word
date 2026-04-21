@@ -84,19 +84,27 @@ MIN_WORD_LENGTH = 3          # shortest word to include
 # (48,560 lemmas after quality gate). Re-derive via calibrate_ru.py --rebuild
 # if the frequency list or quality gate changes significantly.
 #
-# Both languages use the same percentile spine (top 2/3/5/8/12%). The raw
+# Both languages use the same percentile spine (top 3/5/7/10/14%). The raw
 # counts differ because the corpora have different densities — percentiles
 # are the stable anchor; raw counts are what those percentiles happen to be.
+#
+# Spine rationale: the shifted spine (vs the earlier 2/3/5/8/12% design)
+# captures subtitle-underrepresented common words (e.g. утка, freq=1015)
+# as required at appropriate profiles, and gives ~10-20% more eligible source
+# words per profile. Overlapping length windows (A) were chosen over
+# non-overlapping (B) because Window B collapses the P5 candidate pool to
+# ~0 in Russian — the subtitle corpus lacks enough high-frequency 7-9 letter
+# words. See docs/DECISIONS.md D16 for full analysis.
 #
 # Note: MIN_WORD_LENGTH = 3 is the absolute floor applied before any profile
 # filtering. Words below it are silently dropped entirely.
 # ---------------------------------------------------------------------------
 PROFILES = {
-    'P1_BEGINNER': {'freq_threshold': 3925, 'min_length': 3, 'max_length': 4, 'percentile':  2},
-    'P2_EASY':     {'freq_threshold': 2395, 'min_length': 3, 'max_length': 5, 'percentile':  3},
-    'P3_MEDIUM':   {'freq_threshold': 1313, 'min_length': 4, 'max_length': 6, 'percentile':  5},
-    'P4_HARD':     {'freq_threshold':  669, 'min_length': 5, 'max_length': 7, 'percentile':  8},
-    'P5_EXPERT':   {'freq_threshold':  351, 'min_length': 5, 'max_length': 8, 'percentile': 12},
+    'P1_BEGINNER': {'freq_threshold': 2395, 'min_length': 3, 'max_length': 4, 'percentile':  3},
+    'P2_EASY':     {'freq_threshold': 1313, 'min_length': 3, 'max_length': 5, 'percentile':  5},
+    'P3_MEDIUM':   {'freq_threshold':  808, 'min_length': 4, 'max_length': 6, 'percentile':  7},
+    'P4_HARD':     {'freq_threshold':  466, 'min_length': 5, 'max_length': 7, 'percentile': 10},
+    'P5_EXPERT':   {'freq_threshold':  271, 'min_length': 5, 'max_length': 8, 'percentile': 14},
 }
 
 # Maps profile name → difficulty string written to the level JSON.

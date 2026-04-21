@@ -217,7 +217,7 @@ English `FUNCTION_WORD_POS`: `{'ADP', 'PRON', 'CCONJ', 'SCONJ', 'DET', 'INTJ', '
 
 **Length is the primary difficulty axis.** Each profile defines a required-word length window (min_length–max_length). As profiles get harder, the window shifts upward: players must find longer words. **Frequency threshold is secondary** — it prevents truly obscure words from appearing as required, and loosens as length increases because longer words are naturally rarer in any corpus even when well-known.
 
-**Frequency thresholds are anchored to corpus percentiles**, not raw counts. Both languages share the same percentile spine; the raw numbers differ because the corpora have different densities. Percentiles are the stable anchor across any future corpus swap.
+**Frequency thresholds are anchored to corpus percentiles**, not raw counts. Both languages share the same percentile spine (top 3/5/7/10/14%); the raw numbers differ because the corpora have different densities. Percentiles are the stable anchor across any future corpus swap.
 
 **The same source word can appear at multiple profiles.** A 12-letter source word at P1 requires only its very common 3–4 letter subwords; at P5 it requires its 5–8 letter subwords. This is a future design avenue for "level variants."
 
@@ -227,7 +227,7 @@ English `FUNCTION_WORD_POS`: `{'ADP', 'PRON', 'CCONJ', 'SCONJ', 'DET', 'INTJ', '
 
 Both languages use **hermitdave/FrequencyWords** (OpenSubtitles 2018, MIT licence) for both Russian and English. This is a TV/film subtitle corpus.
 
-**Known bias:** subtitle corpora over-represent conversational vocabulary and under-represent concrete everyday nouns, academic words, and formal registers. A word like блокнот (notepad) may have low subtitle frequency despite being universally known. **Mitigation:** percentile anchoring means the system is self-correcting — thresholds track the corpus distribution rather than absolute counts. Words outside required still appear as bonus. The bias is most significant at P6–P10 (top 25–52% of vocab) where the tail diverges more; this is noted as a known limitation for when those profiles are built.
+**Known bias:** subtitle corpora over-represent conversational vocabulary and under-represent concrete everyday nouns, academic words, and formal registers. A word like утка (duck, freq=1,015) or блокнот (notepad) may have low subtitle frequency despite being universally known. **Mitigation:** the shifted percentile spine (top 3–14%) was chosen partly to capture more of these subtitle-underrepresented words as required — e.g. утка (freq=1,015) becomes required at P3 (ft=808) under the shifted spine but was permanently bonus under the old spine. Percentile anchoring means thresholds track the corpus distribution rather than absolute counts. Words outside required still appear as bonus. The bias is most significant at P6–P10 (top 25–52% of vocab) where the tail diverges more; this is noted as a known limitation for when those profiles are built.
 
 **Why not switch to a more balanced corpus (e.g. Lyashevskaya & Sharoff for Russian, COCA for English):** The hermitdave MIT licence is unambiguous for commercial use. Academic corpora carry non-commercial or unclear licence terms. The corpus is gamewide and permanent — switching mid-development would invalidate all manual assignments and calibrated thresholds. The subtitle bias at P1–P5 (top 2–12% of vocab) is modest; the top vocabulary is similar across any serious Russian or English corpus.
 
@@ -239,11 +239,11 @@ Both languages use the same percentile spine. Raw `freq_threshold` values are wh
 
 | Profile | Req len | Percentile | RU ft≥ | EN ft≥ |
 |---------|---------|-----------|--------|--------|
-| P1_BEGINNER | 3–4 | top 2% | 3,925 | 37,844 |
-| P2_EASY | 3–5 | top 3% | 2,395 | 21,042 |
-| P3_MEDIUM | 4–6 | top 5% | 1,313 | 9,997 |
-| P4_HARD | 5–7 | top 8% | 669 | 4,730 |
-| P5_EXPERT | 5–8 | top 12% | 351 | 2,179 |
+| P1_BEGINNER | 3–4 | top 3% | 2,395 | 21,042 |
+| P2_EASY | 3–5 | top 5% | 1,313 | 9,997 |
+| P3_MEDIUM | 4–6 | top 7% | 808 | 5,914 |
+| P4_HARD | 5–7 | top 10% | 466 | 3,108 |
+| P5_EXPERT | 5–8 | top 14% | 271 | 1,637 |
 
 Example required words per tier (Russian / English):
 
@@ -254,6 +254,8 @@ Example required words per tier (Russian / English):
 | P3 4–6 | только, сейчас, почему | really, people, always |
 | P4 5–7 | сказать, сегодня, никогда | believe, morning, already |
 | P5 5–8 | говорить, проблема, получить | remember, actually, together |
+
+**Spine selection rationale (Window A + shifted spine):** Two axes were sampled against ~440 nouns per language: length windows (A = current overlapping; B = non-overlapping P1:3-4/P2:4-5/P3:5-6/P4:6-7/P5:7-9) and spine position (current 2/3/5/8/12% vs shifted 3/5/7/10/14%). Window B collapses the Russian P5 eligible pool to near zero — the subtitle corpus lacks enough high-frequency 7–9 letter words. Window A + shifted spine gives the best eligible-word counts (~200–570 clean-gap candidates per profile in Russian, ~430–910 in English) and is consistent with the P6–P10 window roadmap. Length windows were kept overlapping for the same reason: non-overlapping windows make P6–P10 impossible to populate in Russian.
 
 ---
 
@@ -281,6 +283,7 @@ P6–P10 required words are longer everyday words: говорить, норма�
 - **POS:** nouns only
 - **Minimum recognisability frequency:** ~100 (words below this are likely unknown to players)
 - **Required word count target:** 5–15 at the assigned profile (the eligibility band)
+- **Gap ratio preference (soft):** prefer source words where `freq(last required) / freq(first excluded)` ≥ 2.0 (decent) or ≥ 4.0 (clean) at the assigned profile. This means the frequency cut between required and bonus falls in a natural gap rather than splitting a cluster of similar-frequency words. Clean gaps are ~3–13% of eligible words depending on profile and language — this is a tiebreaker, not a filter. The calibrator displays gap ratio for each eligible profile.
 
 **Future expansion avenues (not yet implemented):**
 - **Longer source words (16–25 letters):** viable for P8–P10. Russian has richer long-word vocabulary (up to 21 letters in quality-gated vocab: самосовершенствование, достопримечательность). English tops out around 16 (responsibility, extraterrestrial). Requires P6–P10 profiles to be active.

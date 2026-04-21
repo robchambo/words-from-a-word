@@ -225,6 +225,28 @@ def get_required(candidates, profile):
     return words
 
 
+def get_gap_ratio(candidates, profile):
+    """
+    Ratio of the last required word's freq to the first excluded word's freq
+    within the profile's length window. Higher = more natural cutoff.
+    Prefer source words with gap >= 2.0 (decent) or >= 4.0 (clean).
+    This is a soft preference for source word selection, not a hard filter —
+    clean gaps are only ~4-13% of eligible words regardless of threshold.
+    Returns None if one side of the gap is empty.
+    """
+    pr = g.PROFILES[profile]
+    window = sorted(
+        [(w, c) for w, c in candidates
+         if pr['min_length'] <= len(w) <= pr['max_length']],
+        key=lambda x: x[1], reverse=True
+    )
+    req = [c for _, c in window if c >= pr['freq_threshold']]
+    exc = [c for _, c in window if c < pr['freq_threshold']]
+    if not req or not exc:
+        return None
+    return req[-1] / exc[0]
+
+
 def get_near_miss(candidates, profile, n=5):
     """
     Returns up to n formable words that just missed the required threshold for
@@ -376,7 +398,9 @@ def print_source_word_detail(vocab, manual):
                 med      = median_of(words)
                 n        = len(words)
                 man_tag  = '  [MANUAL]' if p == man else ''
-                print(f"  {pshort(p)}  {n:2d}w  med {med:>8,}{man_tag}")
+                gr       = get_gap_ratio(candidates, p)
+                gr_str   = f'  gap={gr:.1f}' if gr is not None else ''
+                print(f"  {pshort(p)}  {n:2d}w  med {med:>8,}{man_tag}{gr_str}")
 
                 if prev_set is None:
                     line = wrap_words([w for w, _ in words], '    ', '    ')
