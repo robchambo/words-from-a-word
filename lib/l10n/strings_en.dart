@@ -68,4 +68,13 @@ class StringsEn {
   static const String levelCompleteTitle = 'Level Complete!';
   static const String nextLevelButton = 'Next Level';
   static const String wordsFoundLabel = 'words found';
+
+  // Settings screen
+  static const String settingsTitle = 'Settings';
+  static const String settingsLanguage = 'Language';
+  static const String settingsRules = 'How to play';
+  static const String settingsMute = 'Mute sounds';
+  static const String settingsRemoveAds = 'Remove ads';
+  static const String settingsRestore = 'Restore purchases';
+  static const String settingsPrivacy = 'Privacy policy';
 }
