@@ -131,7 +131,10 @@ class GameScreen extends StatelessWidget {
                   score: state.pendingScore,
                   wordsFound: state.foundWords.length,
                   languageMode: mode,
-                  onNextLevel: () => game.nextLevel(mode),
+                  onNextLevel: () {
+                    game.bankAndAdvance(mode);
+                    game.nextLevel(mode);
+                  },
                 ),
             ],
           ),

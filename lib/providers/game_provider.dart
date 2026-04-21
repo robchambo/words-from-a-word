@@ -172,6 +172,9 @@ class GameProvider extends ChangeNotifier {
 
     final foundTarget = s.level.targetWords.firstWhere((tw) => tw.word == word);
     final points = GameEngine.scoreWord(word, isBonus: foundTarget.isBonus);
+    if (foundTarget.isBonus) {
+      _rewards.incrementBonusCounter();
+    }
     final newFoundWords = [...s.foundWords, word];
     final updatedTargetWords = s.level.targetWords
         .map((tw) => tw.word == word ? tw.copyWith(isFound: true) : tw)
@@ -293,14 +296,25 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Commits pendingScore + best score for the current level and advances
+  /// the level index. Requires `state.isLevelComplete` — abandons are handled
+  /// by the next `startGame` implicitly discarding pendingScore.
+  void bankAndAdvance(LanguageMode mode) {
+    if (_state == null || !_state!.isLevelComplete) return;
+    _rewards.onLevelComplete(
+      mode: mode,
+      levelId: _currentLevelIndex,
+      pendingScore: _state!.pendingScore,
+    );
+    // nextLevel is now called separately by the caller so LibraryCompleteScreen
+    // (Phase 3) can interpose.
+  }
+
   void nextLevel(LanguageMode mode) {
-    final savedPendingScore = _state!.pendingScore;
     _currentLevelIndex++;
     final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
-    _state = GameState(
-      level: level,
-      pendingScore: savedPendingScore,
-    );
+    _state = GameState(level: level);
+    _rewards.maybeRefillDailyHint();
     notifyListeners();
   }
 
