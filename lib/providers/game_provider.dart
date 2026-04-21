@@ -143,7 +143,7 @@ class GameProvider extends ChangeNotifier {
 
     HapticFeedback.mediumImpact();
 
-    final points = GameEngine.scoreWord(word);
+    final points = GameEngine.scoreWord(word, isBonus: false);
     final newFoundWords = [...s.foundWords, word];
     final updatedTargetWords = s.level.targetWords
         .map((tw) => tw.word == word ? tw.copyWith(isFound: true) : tw)

@@ -85,10 +85,10 @@ void main() {
     });
 
     test('scoreWord scoring', () {
-      expect(GameEngine.scoreWord('bar'), 30); // 3 * 10 + 0
-      expect(GameEngine.scoreWord('star'), 50); // 4 * 10 + 10
-      expect(GameEngine.scoreWord('stare'), 70); // 5 * 10 + 20
-      expect(GameEngine.scoreWord('arrest'), 90); // 6 * 10 + 30
+      expect(GameEngine.scoreWord('bar', isBonus: false), 30); // 3 * 10 + 0
+      expect(GameEngine.scoreWord('star', isBonus: false), 50); // 4 * 10 + 10
+      expect(GameEngine.scoreWord('stare', isBonus: false), 70); // 5 * 10 + 20
+      expect(GameEngine.scoreWord('arrest', isBonus: false), 90); // 6 * 10 + 30
     });
 
     test('isLevelComplete', () {

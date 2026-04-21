@@ -44,16 +44,24 @@ class GameEngine {
     return WordValidationResult.found;
   }
 
-  static int scoreWord(String word) {
-    final base = word.length * 10;
-    final bonus = word.length >= 6
-        ? 30
-        : word.length >= 5
-            ? 20
-            : word.length >= 4
-                ? 10
-                : 0;
-    return base + bonus;
+  static const int _bonusWordFlatScore = 15; // TODO(phase-6): read from RemoteConfigService.bonusWordFlatScore
+
+  static int scoreWord(String word, {required bool isBonus}) {
+    if (isBonus) {
+      return _bonusWordFlatScore;
+    }
+    final n = word.length;
+    int lengthBonus;
+    if (n >= 6) {
+      lengthBonus = 30;
+    } else if (n == 5) {
+      lengthBonus = 20;
+    } else if (n == 4) {
+      lengthBonus = 10;
+    } else {
+      lengthBonus = 0;
+    }
+    return n * 10 + lengthBonus;
   }
 
   static bool isLevelComplete(List<TargetWord> targetWords) {
