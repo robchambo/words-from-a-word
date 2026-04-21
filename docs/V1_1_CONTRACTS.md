@@ -75,7 +75,7 @@ rewards.levelBestScore.en     String (JSON map)
 rewards.lifetimeScore.ru      int
 rewards.lifetimeScore.en      int
 
-settings.languageMode         String (existing)
+language_mode                 String (existing v1.0 key; retained for backward compat)
 settings.muted                bool   (new, Phase 4)
 ```
 

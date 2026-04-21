@@ -82,7 +82,7 @@ void main() {
   group('RewardsProvider migration from v1.0', () {
     test('bare SharedPreferences (only languageMode) produces defaults', () async {
       SharedPreferences.setMockInitialValues({
-        'settings.languageMode': 'russian',
+        'language_mode': 'russian',
       });
 
       final provider = RewardsProvider();
