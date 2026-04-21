@@ -259,4 +259,68 @@ void main() {
     expect(p.freeHintSlot, 2,
         reason: 'cap is now 3; today\'s refill can bump 1->2');
   });
+
+  group('onLevelComplete (Phase 1 minimal)', () {
+    test('updates highestCompletedLevel and currentLevel advance', () async {
+      final p = RewardsProvider();
+      await p.load();
+
+      p.onLevelComplete(
+        mode: LanguageMode.russian,
+        levelId: 3,
+        pendingScore: 150,
+      );
+
+      expect(p.highestCompletedLevel[LanguageMode.russian], 3);
+      expect(p.currentLevel[LanguageMode.russian], 4);
+    });
+
+    test('records best score and lifetime score', () async {
+      final p = RewardsProvider();
+      await p.load();
+
+      p.onLevelComplete(
+        mode: LanguageMode.english,
+        levelId: 1,
+        pendingScore: 80,
+      );
+      p.onLevelComplete(
+        mode: LanguageMode.english,
+        levelId: 1,
+        pendingScore: 120,
+      );
+
+      expect(p.levelBestScore[LanguageMode.english]![1], 120);
+      expect(p.lifetimeScore[LanguageMode.english], 200);
+    });
+
+    test('does not downgrade best score', () async {
+      final p = RewardsProvider();
+      await p.load();
+
+      p.onLevelComplete(
+        mode: LanguageMode.russian,
+        levelId: 1,
+        pendingScore: 150,
+      );
+      p.onLevelComplete(
+        mode: LanguageMode.russian,
+        levelId: 1,
+        pendingScore: 80,
+      );
+
+      expect(p.levelBestScore[LanguageMode.russian]![1], 150);
+    });
+  });
+
+  test('unlockAchievement adds id and is idempotent', () async {
+    final p = RewardsProvider();
+    await p.load();
+
+    p.unlockAchievement('first_word');
+    p.unlockAchievement('first_word');
+    p.unlockAchievement('first_level');
+
+    expect(p.achievementsUnlocked, {'first_word', 'first_level'});
+  });
 }

@@ -202,6 +202,43 @@ class RewardsProvider extends ChangeNotifier {
     save();
   }
 
+  /// Called by GameProvider when a non-replay level completes. Phase 3 will
+  /// extend this with streak logic + `isReplay` guarding; for Phase 1 we only
+  /// persist best score, lifetime score, and advance the current level
+  /// pointer.
+  void onLevelComplete({
+    required LanguageMode mode,
+    required int levelId,
+    required int pendingScore,
+  }) {
+    final best = levelBestScore[mode]![levelId] ?? 0;
+    if (pendingScore > best) {
+      levelBestScore[mode]![levelId] = pendingScore;
+    }
+    lifetimeScore[mode] = (lifetimeScore[mode] ?? 0) + pendingScore;
+
+    final prevHigh = highestCompletedLevel[mode] ?? 0;
+    if (levelId > prevHigh) {
+      highestCompletedLevel[mode] = levelId;
+    }
+    final prevCurrent = currentLevel[mode] ?? 1;
+    if (levelId + 1 > prevCurrent) {
+      currentLevel[mode] = levelId + 1;
+    }
+
+    notifyListeners();
+    save();
+  }
+
+  /// Record an achievement unlock. Idempotent. Phase 3 AchievementEngine
+  /// wraps this with event hooks and analytics.
+  void unlockAchievement(String id) {
+    if (achievementsUnlocked.add(id)) {
+      notifyListeners();
+      save();
+    }
+  }
+
   // --- Parsers / writers ------------------------------------------------
   DateTime? _parseDate(String? s) {
     if (s == null || s.isEmpty) return null;
