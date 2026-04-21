@@ -216,15 +216,20 @@ class RewardsProvider extends ChangeNotifier {
     save();
   }
 
-  /// Called by GameProvider when a non-replay level completes. Phase 3 will
-  /// extend this with streak logic + `isReplay` guarding; for Phase 1 we only
-  /// persist best score, lifetime score, and advance the current level
-  /// pointer.
+  /// Called by GameProvider when a level completes. If [isReplay] is true,
+  /// no stats are updated — only `notifyListeners()` is called. Otherwise,
+  /// banks lifetime score, best score, level pointers, and streak.
   void onLevelComplete({
     required LanguageMode mode,
     required int levelId,
     required int pendingScore,
+    required bool isReplay,
   }) {
+    if (isReplay) {
+      notifyListeners();
+      return;
+    }
+
     final best = levelBestScore[mode]![levelId] ?? 0;
     if (pendingScore > best) {
       levelBestScore[mode]![levelId] = pendingScore;
@@ -240,9 +245,28 @@ class RewardsProvider extends ChangeNotifier {
       currentLevel[mode] = levelId + 1;
     }
 
+    // Streak logic
+    final today = _dateOnly(_clock());
+    final last = streakLastPlayedOn;
+    if (last == null) {
+      streakCount = 1;
+    } else {
+      final gap = today.difference(last).inDays;
+      if (gap == 0) {
+        // same day — no change
+      } else if (gap == 1) {
+        streakCount += 1;
+      } else {
+        streakCount = 1;
+      }
+    }
+    streakLastPlayedOn = today;
+
     notifyListeners();
     save();
   }
+
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   /// Record an achievement unlock. Idempotent. Phase 3 AchievementEngine
   /// wraps this with event hooks and analytics.

@@ -309,6 +309,7 @@ class GameProvider extends ChangeNotifier {
       mode: mode,
       levelId: _currentLevelIndex,
       pendingScore: _state!.pendingScore,
+      isReplay: _state!.isReplayMode,
     );
     // nextLevel is now called separately by the caller so LibraryCompleteScreen
     // (Phase 3) can interpose.
