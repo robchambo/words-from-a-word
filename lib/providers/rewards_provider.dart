@@ -4,8 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/language_mode.dart';
-// ignore: unused_import
-import '../services/ad_gateway.dart'; // for HintSource
+import '../services/ad_gateway.dart';
 
 /// Owns all persisted v1.1 player state except language. See
 /// `docs/V1_1_CONTRACTS.md` for authoritative field list and persistence keys.
@@ -144,6 +143,34 @@ class RewardsProvider extends ChangeNotifier {
     lastDailyClaimedOn = today;
     notifyListeners();
     // fire-and-forget persist
+    save();
+  }
+
+  /// Consume one hint from the waterfall: free slot first, then purchased
+  /// pool. Returns the source used. Returns null if the caller should fall
+  /// back to a rewarded ad (handled upstream).
+  HintSource? consumeHint() {
+    if (freeHintSlot > 0) {
+      freeHintSlot -= 1;
+      notifyListeners();
+      save();
+      return HintSource.freeSlot;
+    }
+    if (purchasedHintCount > 0) {
+      purchasedHintCount -= 1;
+      notifyListeners();
+      save();
+      return HintSource.purchased;
+    }
+    return null;
+  }
+
+  /// Credit n hints into the purchased pool. Used by rewarded-ad reward and
+  /// by the hint-pack IAP (which calls with n=5).
+  void addPurchasedHints(int n) {
+    if (n <= 0) return;
+    purchasedHintCount += n;
+    notifyListeners();
     save();
   }
 

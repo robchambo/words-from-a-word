@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 
 void main() {
   setUp(() {
@@ -164,5 +165,45 @@ void main() {
 
       expect(provider.freeHintSlot, 3);
     });
+  });
+
+  group('consumeHint', () {
+    test('returns freeSlot when slot > 0', () async {
+      SharedPreferences.setMockInitialValues({'rewards.freeHintSlot': 1});
+      final p = RewardsProvider();
+      await p.load();
+
+      final src = p.consumeHint();
+
+      expect(src, HintSource.freeSlot);
+      expect(p.freeHintSlot, 0);
+    });
+
+    test('returns purchased when slot empty and pool > 0', () async {
+      SharedPreferences.setMockInitialValues({'rewards.purchasedHintCount': 2});
+      final p = RewardsProvider();
+      await p.load();
+
+      final src = p.consumeHint();
+
+      expect(src, HintSource.purchased);
+      expect(p.purchasedHintCount, 1);
+    });
+
+    test('returns null when neither available', () async {
+      final p = RewardsProvider();
+      await p.load();
+
+      expect(p.consumeHint(), isNull);
+    });
+  });
+
+  test('addPurchasedHints increments pool', () async {
+    final p = RewardsProvider();
+    await p.load();
+
+    p.addPurchasedHints(5);
+
+    expect(p.purchasedHintCount, 5);
   });
 }
