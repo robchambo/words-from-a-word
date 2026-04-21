@@ -8,7 +8,7 @@ Project guide for Claude Code. Read this first, then `docs/DECISIONS.md` for the
 
 A bilingual (Russian/English) casual word game for the Russian-speaking US diaspora. Players are given a long source word and must form shorter words by tapping letter tiles. The design aesthetic is **Soviet Notebook** — cream paper background, navy ink typography, crimson red accents, amber gold rewards.
 
-- **Platform:** iOS + Android (Flutter only, no web)
+- **Platform:** iOS + Android for shipped builds. Flutter web (Chrome target) is enabled for development-preview use only and is never distributed to end users.
 - **State management:** Provider (ChangeNotifier)
 - **Animations:** flutter_animate
 - **Fonts:** google_fonts package (runtime loading — no bundled `.ttf` files)

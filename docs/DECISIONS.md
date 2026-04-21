@@ -304,3 +304,20 @@ P6–P10 required words are longer everyday words: говорить, норма�
 **`freq_threshold` vs. suggestion targets — key distinction:** `freq_threshold` is the per-word floor determining required vs. bonus. Suggestion targets are the expected median frequency of required words for a profile tier — same numeric scale, different meaning. A source word's required-word median can sit well above `freq_threshold`; the suggestion target tells the calibrator which profile tier that median best matches.
 
 **Impact:** `PROFILES` dict in both generators updated to new parameters. `calibrate_*.py` updated with `get_near_miss()`. `manual_assignments_*.json` stores confirmed profile assignments. D13 superseded.
+
+---
+
+## D17 — Level IDs derived from array position; explicit end-of-library screen
+
+**Decision (recorded 2026-04-16, during Phase 0 of the v1.1 roadmap; imported from `main` onto `v2` trunk 2026-04-21):** Two related choices about level data:
+
+1. **Level JSON does not carry an explicit `id` field.** `LevelLoader.generateLevel(levelNumber)` derives the ID from its `levelNumber` parameter (which is the 1-indexed array position + 1). An earlier GDD example showed `"id": 1` in the JSON — that example was wrong and has been corrected in §5.1.
+2. **End-of-library silent wrap is a v1.0 bug, not a feature.** `LevelLoader.generateLevel` currently does `(levelNumber - 1) % defs.length`, so finishing the last level and tapping "Next level" silently restarts at level 1. This was never intentional. v1.1 replaces it with an explicit "library complete" screen that offers free-mode replays of completed levels (score/best/lifetime not affected). See GDD §5.7.
+
+**Why (1):** Adding `id` to JSON creates a source-of-truth conflict — if the JSON `id` ever drifted from array position (e.g. during a reorder for difficulty tuning), behaviour would depend on whether code uses the array index or the field. Keeping derivation canonical removes that hazard.
+
+**Why (2):** Silent wrap destroys the sense of progression once a user reaches the end, and hides lifetime/best-score stats that should be celebrated. An explicit screen is more rewarding, supports the free-mode replay pattern (which lets hint-farmers grind without inflating stats), and is the obvious place to advertise upcoming content.
+
+**Impact:** Level JSONs remain as-is (no rewrite needed). `LevelLoader.generateLevel` must change in v1.1 to throw/return-null when `levelNumber > defs.length`, and `GameProvider.nextLevel` must handle that result by routing to the library-complete screen. The code change is scheduled for Phase 3 of the v1.1 roadmap.
+
+**Note on numbering:** This entry was D10 on `main`. When the v2 trunk was created from `median-calibration`, D10 was already assigned to "Frequency-ranked dictionary as the source of truth for word lists" (which supersedes the old pre-dictionary D1). This Phase 0 decision is renumbered to D17 to avoid collision; no other content changes.
