@@ -89,7 +89,10 @@ class HomeScreen extends StatelessWidget {
                         isScrollControlled: true,
                         backgroundColor: Colors.transparent,
                         builder: (_) =>
-                            RulesModal(languageMode: settings.languageMode),
+                            RulesModal(
+                              languageMode:
+                                  settings.languageMode ?? LanguageMode.russian,
+                            ),
                       );
                     },
                     child: Text(

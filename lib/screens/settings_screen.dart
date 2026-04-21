@@ -49,7 +49,7 @@ class SettingsScreen extends StatelessWidget {
                 label: langLabel,
                 onTap: () => _openLanguageSheet(context, settings),
                 trailing: Text(
-                  settings.languageMode.displayName,
+                  (settings.languageMode ?? LanguageMode.russian).displayName,
                   style: AppTheme.condensedLabel,
                 ),
               ),
@@ -104,7 +104,9 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       backgroundColor: AppTheme.background,
       isScrollControlled: true,
-      builder: (_) => RulesModal(languageMode: settings.languageMode),
+      builder: (_) => RulesModal(
+            languageMode: settings.languageMode ?? LanguageMode.russian,
+          ),
     );
   }
 

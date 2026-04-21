@@ -7,8 +7,8 @@ class SettingsProvider extends ChangeNotifier {
   static const _kLanguageMode = 'language_mode';
   static const _kMuted = 'settings.muted';
 
-  LanguageMode _languageMode = LanguageMode.english;
-  LanguageMode get languageMode => _languageMode;
+  LanguageMode? _languageMode;
+  LanguageMode? get languageMode => _languageMode;
 
   bool _muted = false;
   bool get muted => _muted;
@@ -21,7 +21,7 @@ class SettingsProvider extends ChangeNotifier {
     } else if (saved == 'english') {
       _languageMode = LanguageMode.english;
     }
-    // else: no saved value — keep the default (LanguageMode.english)
+    // else: no saved value — null means "first launch, no language chosen yet"
     _muted = prefs.getBool(_kMuted) ?? false;
     notifyListeners();
   }
