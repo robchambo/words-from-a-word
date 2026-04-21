@@ -49,6 +49,10 @@ import os
 import sys
 import time
 import io
+# Importing generate_ru (rather than duplicating its logic) ensures the calibrator
+# runs the identical quality gate — hunspell, lemma filter, POS filter, blocklist,
+# can_form, letter_counts — so calibration results are guaranteed to match what
+# the generator would produce for the same source word.
 import generate_ru as g
 
 CACHE_FILE  = os.path.join(g.SCRIPT_DIR, 'vocab_cache_ru.json')
@@ -179,8 +183,7 @@ def print_distribution_stats(vocab):
               f"({int(p/100 * n):,} words above)")
     print()
     print("Corpus-anchored freq_threshold values (used in PROFILES):")
-    profile_pcts = [('P1_BEGINNER', 2), ('P2_EASY', 5), ('P3_MEDIUM', 10),
-                    ('P4_HARD', 15), ('P5_EXPERT', 20)]
+    profile_pcts = [(p, g.PROFILES[p]['percentile']) for p in PROFILE_ORDER]
     for profile, pct in profile_pcts:
         threshold = compute_threshold_at_percentile(vocab, pct)
         current = g.PROFILES[profile]['freq_threshold']
@@ -192,6 +195,20 @@ def print_distribution_stats(vocab):
 # Phase 2 — source word evaluation
 # ---------------------------------------------------------------------------
 
+def build_candidates_from_vocab(source_word, vocab):
+    """
+    Filters the global vocab to words formable from source_word's letters
+    and shorter than source_word. This full-vocab scan runs once per source
+    word; get_required() then filters this smaller set per profile cheaply.
+    """
+    src_counts = g.letter_counts(source_word.lower())
+    src_len = len(source_word)
+    return [
+        (word, count) for word, count in vocab
+        if len(word) < src_len and g.can_form(word, src_counts)
+    ]
+
+
 def load_manual():
     """Loads manual profile assignments from MANUAL_FILE. Returns {} if absent."""
     if not os.path.exists(MANUAL_FILE):
@@ -200,19 +217,38 @@ def load_manual():
         return json.load(f)
 
 
-def get_required(source_word, vocab, profile):
+def get_required(candidates, profile):
     """
-    Returns list of (word, count) required under the given profile for this
-    source word, sorted by count descending.
+    Filters pre-computed formable candidates to those required under the given
+    profile. Expects candidates from build_candidates_from_vocab — the full-vocab
+    scan happens once per source word there, not once per profile here.
     """
     pr = g.PROFILES[profile]
-    sc = g.letter_counts(source_word.lower())
-    words = [(w, c) for w, c in vocab
-             if len(w) < len(source_word) and g.can_form(w, sc)
-             and pr['min_length'] <= len(w) <= pr['max_length']
+    words = [(w, c) for w, c in candidates
+             if pr['min_length'] <= len(w) <= pr['max_length']
              and c >= pr['freq_threshold']]
     words.sort(key=lambda x: x[1], reverse=True)
     return words
+
+
+def get_near_miss(candidates, profile, n=5):
+    """
+    Returns up to n formable words that just missed the required threshold for
+    this profile — freq in [ft÷2, ft), within the profile's length window.
+
+    The ft÷2 lower bound is one log-step below the threshold: on the Zipf
+    frequency distribution, halving is as close as doubling, so ft÷2 captures
+    the natural 'borderline' zone without expanding into genuinely rare words.
+    These are candidates worth considering for manual promotion to required via
+    level overrides.
+    """
+    pr = g.PROFILES[profile]
+    ft = pr['freq_threshold']
+    words = [(w, c) for w, c in candidates
+             if pr['min_length'] <= len(w) <= pr['max_length']
+             and ft // 2 <= c < ft]
+    words.sort(key=lambda x: x[1], reverse=True)
+    return words[:n]
 
 
 def median_of(word_count_pairs):
@@ -267,6 +303,26 @@ def suggest_profile(eligible, all_required_for_src, targets):
     return min(set_p, key=lambda p: (log_dist(p), PROFILE_ORDER.index(p)))
 
 
+def pshort(profile):
+    return profile.split('_')[0]
+
+
+def wrap_words(words, first_prefix, cont_prefix, line_width=72):
+    """Wraps a word list across lines with consistent indentation."""
+    if not words:
+        return None
+    lines = []
+    current = first_prefix + words[0]
+    for word in words[1:]:
+        if len(current) + 2 + len(word) > line_width:
+            lines.append(current)
+            current = cont_prefix + word
+        else:
+            current += '  ' + word
+    lines.append(current)
+    return '\n'.join(lines)
+
+
 def print_source_word_detail(vocab, manual):
     print("\nBuilding required word sets...")
     t0 = time.time()
@@ -274,7 +330,8 @@ def print_source_word_detail(vocab, manual):
     all_required = {}
     all_eligible = {}
     for src in SOURCE_WORDS:
-        req = {p: get_required(src, vocab, p) for p in PROFILE_ORDER}
+        candidates = build_candidates_from_vocab(src, vocab)
+        req = {p: get_required(candidates, p) for p in PROFILE_ORDER}
         all_required[src] = req
         all_eligible[src] = [p for p in PROFILE_ORDER
                               if COUNT_MIN <= len(req[p]) <= COUNT_MAX]
@@ -283,47 +340,71 @@ def print_source_word_detail(vocab, manual):
     targets = compute_targets(all_required, all_eligible, manual)
 
     print()
-    print(f"Suggestion targets (from unambiguous + manual anchors):")
+    print("Suggestion targets (from unambiguous + manual anchors):")
     for p in PROFILE_ORDER:
         t = targets[p]
-        print(f"  {p:<14}  {f'{t:,.0f}' if t else 'none (no anchor words yet)'}")
+        print(f"  {pshort(p)}  {f'{t:,.0f}' if t else 'none (no anchor words yet)'}")
 
-    for src in SOURCE_WORDS:
-        req      = all_required[src]
-        eligible = all_eligible[src]
-        man      = manual.get(src)
-        sug      = suggest_profile(eligible, req, targets) if eligible else None
+    unclassified = [s for s in SOURCE_WORDS
+                    if s not in manual and all_eligible.get(s)]
+    classified   = [s for s in SOURCE_WORDS if s in manual]
 
-        print(f"\n{'─' * 64}")
-        print(f"  {src}")
-        print(f"{'─' * 64}")
+    for section, section_words in [("UNCLASSIFIED", unclassified),
+                                    ("CLASSIFIED",   classified)]:
+        if not section_words:
+            continue
+        print(f"\n{'═' * 64}")
+        print(f"{section} ({len(section_words)})")
+        print(f"{'═' * 64}")
 
-        for p in PROFILE_ORDER:
-            words = req[p]
-            n     = len(words)
-            in_el = p in eligible
+        for src in section_words:
+            req      = all_required[src]
+            eligible = all_eligible[src]
+            man      = manual.get(src)
+            sug      = suggest_profile(eligible, req, targets) if eligible else None
 
-            tags = []
-            if p == sug:
-                tags.append("SUGGESTED")
-            if p == man:
-                tags.append("MANUAL ✓" if in_el else "MANUAL ⚠ out of range")
-            tag_str = f"  [{' | '.join(tags)}]" if tags else ""
-
-            if in_el or p == man:
-                med = median_of(words)
-                pr  = g.PROFILES[p]
-                print(f"\n  {p}  ({n} words, ft={pr['freq_threshold']:,}, "
-                      f"len {pr['min_length']}–{pr['max_length']}, median {med:,}){tag_str}")
-                print("    " + "  ".join(f"{w}({c:,})" for w, c in words))
+            el_str = ' '.join(pshort(p) for p in eligible) if eligible else 'none'
+            if man:
+                match = '✓' if man == sug else '✗'
+                sug_str = pshort(sug) if sug else '—'
+                print(f"\n{src:<16}  manual: {pshort(man)}   "
+                      f"suggested: {sug_str}  {match}")
             else:
-                reason = "too few" if n < COUNT_MIN else "too many"
-                print(f"  {p:<14}  {n} words — {reason}")
+                print(f"\n{src:<16}  eligible: {el_str:<20}  "
+                      f"suggested: {pshort(sug) if sug else '—'}")
 
-        if not eligible:
-            print("\n  !! No eligible profile — needs replacement")
-        elif not man:
-            print(f"\n  → Awaiting manual assignment. Suggested: {sug}")
+            prev_set   = None
+            prev_order = []
+            candidates = build_candidates_from_vocab(src, vocab)
+            for p in eligible:
+                words    = req[p]
+                curr_set = set(w for w, _ in words)
+                med      = median_of(words)
+                n        = len(words)
+                man_tag  = '  [MANUAL]' if p == man else ''
+                print(f"  {pshort(p)}  {n:2d}w  med {med:>8,}{man_tag}")
+
+                if prev_set is None:
+                    line = wrap_words([w for w, _ in words], '    ', '    ')
+                else:
+                    removed = [w for w in prev_order if w not in curr_set]
+                    added   = [w for w, _ in words   if w not in prev_set]
+                    if removed:
+                        line = wrap_words(removed, '    − ', '      ')
+                        if line: print(line)
+                    line = wrap_words(added, '    + ', '      ') if added else None
+                    if not removed and not added:
+                        line = '    (no change)'
+
+                if line: print(line)
+
+                near = get_near_miss(candidates, p)
+                if near:
+                    nm_line = wrap_words([w for w, _ in near], '    ↓ ', '      ')
+                    if nm_line: print(nm_line)
+
+                prev_set   = curr_set
+                prev_order = [w for w, _ in words]
 
     # Summary
     no_eligible  = [s for s in SOURCE_WORDS if not all_eligible[s]]
@@ -332,25 +413,29 @@ def print_source_word_detail(vocab, manual):
     pending      = [s for s in SOURCE_WORDS
                     if s not in manual and all_eligible.get(s)]
 
-    print(f"\n{'=' * 64}")
+    print(f"\n{'═' * 64}")
     print(f"Summary: {len(SOURCE_WORDS)} source words  |  "
           f"{len(manual)} manual  |  {len(pending)} pending")
     if no_eligible:
         print(f"\n  ✗ No eligible profile (replace these):")
         for s in no_eligible:
-            counts_str = "  ".join(f"{p[3:6]}={len(all_required[s][p])}"
+            counts_str = '  '.join(f"{pshort(p)}={len(all_required[s][p])}"
                                    for p in PROFILE_ORDER)
             print(f"    {s:<16}  {counts_str}")
     if out_of_range:
         print(f"\n  ⚠ Manual assignment out of range:")
         for s in out_of_range:
-            el_str = ", ".join(all_eligible[s]) or "none"
-            print(f"    {s:<16}  manual={manual[s]}  eligible=[{el_str}]")
+            man_p     = manual[s]
+            man_count = len(all_required[s][man_p])
+            el_str    = '  '.join(f"{pshort(p)}({len(all_required[s][p])})"
+                                  for p in all_eligible[s]) or 'none'
+            print(f"    {s:<16}  manual={pshort(man_p)}({man_count})   "
+                  f"eligible=[{el_str}]")
     if pending:
         print(f"\n  Pending manual assignments:")
         for s in pending:
             sug = suggest_profile(all_eligible[s], all_required[s], targets)
-            print(f"    {s:<16}  suggested: {sug}")
+            print(f"    {s:<16}  suggested: {pshort(sug)}")
     print()
 
 

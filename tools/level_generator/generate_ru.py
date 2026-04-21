@@ -61,42 +61,42 @@ import pymorphy3
 MIN_WORD_LENGTH = 3          # shortest word to include
 
 # ---------------------------------------------------------------------------
-# Difficulty profiles — five standard configurations. Profile assignment for
-# each source word is determined by calibrate_ru.py, which computes the median
-# corpus frequency of formable content words within the length window and
-# matches it to each profile's median target range. See docs/DECISIONS.md D16.
+# Difficulty profiles — five standard configurations (P1–P5). Profile
+# assignment for each source word is determined by calibrate_ru.py.
+# See docs/DECISIONS.md D16 for the full P1–P10 design rationale.
+#
+# Length is the primary difficulty axis; freq_threshold is secondary (it
+# prevents truly obscure words from appearing as required, and drops as
+# length increases since long words are naturally rarer in any corpus).
 #
 #   Profile        ft     min_l  max_l   Corpus percentile
-#   P1_BEGINNER  4000       3      4     top  2% of valid lemmas (≥3,925)
-#   P2_EASY      1300       3      5     top  5% of valid lemmas (≥1,313)
-#   P3_MEDIUM     470       3      5     top 10% of valid lemmas (≥466)
-#   P4_HARD       240       4      6     top 15% of valid lemmas (≥241)
-#   P5_EXPERT     144       4      6     top 20% of valid lemmas (≥144)
+#   P1_BEGINNER  3925       3      4     top  2% of valid lemmas
+#   P2_EASY      2395       3      5     top  3% of valid lemmas
+#   P3_MEDIUM    1313       4      6     top  5% of valid lemmas
+#   P4_HARD       669       5      7     top  8% of valid lemmas
+#   P5_EXPERT     351       5      8     top 12% of valid lemmas
 #
 # ft    = freq_threshold: words below this go to bonus (too rare for required)
-# min_l = min_length:     words shorter than this go to bonus (too short for required)
-# max_l = max_length:     words longer than this go to bonus (too long for required)
+# min_l = min_length:     words shorter than this go to bonus (too short)
+# max_l = max_length:     words longer than this go to bonus (too long)
 #
 # Thresholds are anchored to percentiles of the global valid-lemma vocabulary
-# (48,560 lemmas after quality gate). Re-derive via calibrate_ru.py if the
-# frequency list or quality gate changes significantly.
+# (48,560 lemmas after quality gate). Re-derive via calibrate_ru.py --rebuild
+# if the frequency list or quality gate changes significantly.
 #
-# P1_BEGINNER uses top 2% rather than top 1% (as in English) because Russian's
-# top-frequency vocabulary is sparser in short formable forms — moving to top 1%
-# drops P1 required counts below 7 for most source words (e.g. воспитание: 8→3,
-# воображение: 10→5). English needs the stricter top 1% cutoff because it has
-# far more short, extremely high-frequency content words that inflate counts.
-# See docs/DECISIONS.md D16.
+# Both languages use the same percentile spine (top 2/3/5/8/12%). The raw
+# counts differ because the corpora have different densities — percentiles
+# are the stable anchor; raw counts are what those percentiles happen to be.
 #
-# Note: the global MIN_WORD_LENGTH = 3 is the absolute floor applied before
-# any profile filtering. Words below it are silently dropped entirely.
+# Note: MIN_WORD_LENGTH = 3 is the absolute floor applied before any profile
+# filtering. Words below it are silently dropped entirely.
 # ---------------------------------------------------------------------------
 PROFILES = {
-    'P1_BEGINNER': {'freq_threshold': 4000, 'min_length': 3, 'max_length': 4},
-    'P2_EASY':     {'freq_threshold': 1300, 'min_length': 3, 'max_length': 5},
-    'P3_MEDIUM':   {'freq_threshold':  470, 'min_length': 3, 'max_length': 5},
-    'P4_HARD':     {'freq_threshold':  240, 'min_length': 4, 'max_length': 6},
-    'P5_EXPERT':   {'freq_threshold':  144, 'min_length': 4, 'max_length': 6},
+    'P1_BEGINNER': {'freq_threshold': 3925, 'min_length': 3, 'max_length': 4, 'percentile':  2},
+    'P2_EASY':     {'freq_threshold': 2395, 'min_length': 3, 'max_length': 5, 'percentile':  3},
+    'P3_MEDIUM':   {'freq_threshold': 1313, 'min_length': 4, 'max_length': 6, 'percentile':  5},
+    'P4_HARD':     {'freq_threshold':  669, 'min_length': 5, 'max_length': 7, 'percentile':  8},
+    'P5_EXPERT':   {'freq_threshold':  351, 'min_length': 5, 'max_length': 8, 'percentile': 12},
 }
 
 # Maps profile name → difficulty string written to the level JSON.

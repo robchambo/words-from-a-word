@@ -133,9 +133,9 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 
 ---
 
-## D13 — Five difficulty profiles (refines D10; further refined by D16)
+## D13 — Five difficulty profiles *(SUPERSEDED by D16)*
 
-**Decision:** Five named difficulty profiles replace ad-hoc per-level threshold overrides. Each profile is a fixed combination of `freq_threshold` (ft), `min_length` (min_l), and `max_length` (max_l):
+The original five-profile design and its threshold values are preserved here for history only. The current profile parameters, design rationale, and full P1–P10 roadmap are in **D16**. Do not use the values in this entry.
 
 | Profile | ft | min_l | max_l | Notes |
 |---|---|---|---|---|
@@ -149,14 +149,6 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 | P3_MEDIUM (EN) | 3100 | 3 | 5 | Top 10% of English vocab |
 | P4_HARD (EN) | 1430 | 4 | 5 | Top 15% of English vocab |
 | P5_EXPERT (EN) | 780 | 4 | 6 | Top 20% of English vocab |
-
-Classification: a word is **required** if `min_length ≤ len ≤ max_length` and `count ≥ freq_threshold`; otherwise it is **bonus** (too short, too long, or too rare). Words below `MIN_WORD_LENGTH = 3` are silently dropped. `tooCommon` is exclusively function words via POS filter (see D15) — there is no frequency-based upper ceiling on required words.
-
-**Why:** No single threshold set works for every source word — vocabulary density varies too much. Named profiles make assignments legible. Difficulty comes from source word selection (see D16), not per-word frequency caps.
-
-**Source words needing replacement:** `правительство` and `территория` (Russian), `thunderstorm` and `playground` (English) cannot reach 7–13 required words at any profile and are flagged with TODO comments in the generator files.
-
-**Impact:** `PROFILES` dict in both generators. All level functions call `make_level(..., 'Pn_NAME', ...)`. `MIN_WORD_LENGTH = 3` remains the global absolute floor; all other threshold parameters are set exclusively through profiles.
 
 ---
 
@@ -219,33 +211,96 @@ English `FUNCTION_WORD_POS`: `{'ADP', 'PRON', 'CCONJ', 'SCONJ', 'DET', 'INTJ', '
 
 ---
 
-## D16 — Median-frequency difficulty calibration; corpus-anchored thresholds (refines D13)
+## D16 — Profile system design: P1–P10 roadmap, corpus, calibration (supersedes D13)
 
-**Decision:** Profile difficulty is calibrated by the **median corpus frequency of formable content words within the profile's length window** for a given source word, not by counting required words. `freq_threshold` values are anchored to fixed percentiles of the global valid-lemma vocabulary rather than tuned to hit a target word count.
+### Difficulty design principles
 
-**Percentile anchors:**
+**Length is the primary difficulty axis.** Each profile defines a required-word length window (min_length–max_length). As profiles get harder, the window shifts upward: players must find longer words. **Frequency threshold is secondary** — it prevents truly obscure words from appearing as required, and loosens as length increases because longer words are naturally rarer in any corpus even when well-known.
 
-| Profile | Percentile | Rationale |
-|---|---|---|
-| P1_BEGINNER | top 1% (EN) / top 2% (RU) | Household vocabulary — words used without thinking |
-| P2_EASY | top 5% | Everyday educated vocabulary |
-| P3_MEDIUM | top 10% | Words appearing regularly in books and news |
-| P4_HARD | top 15% | Extended vocabulary — rewards wide reading |
-| P5_EXPERT | top 20% | Rare/literary — genuinely challenging |
+**Frequency thresholds are anchored to corpus percentiles**, not raw counts. Both languages share the same percentile spine; the raw numbers differ because the corpora have different densities. Percentiles are the stable anchor across any future corpus swap.
 
-**Why the percentiles differ between languages:** English has far more short, extremely high-frequency content words (run, eat, end, turn, etc.) that inflate required counts at P1_BEGINNER. Using top 2% for English P1 (as in Russian) produces 18–28 required words for rich source words like adventure or waterfall. Russian's top-frequency vocabulary is sparser in short formable forms — top 2% produces 8–11 required words, while top 1% would collapse counts to 3–6. The percentile anchors are therefore set independently per language, choosing the tightest cutoff that keeps most source words in the 7–13 required word band.
+**The same source word can appear at multiple profiles.** A 12-letter source word at P1 requires only its very common 3–4 letter subwords; at P5 it requires its 5–8 letter subwords. This is a future design avenue for "level variants."
 
-**Why median, not required count:** Required word count is a function of both the source word AND the profile thresholds — it changes every time thresholds are adjusted. The median frequency of the formable word set is an intrinsic property of the source word at a given profile: a source word whose formable words are all very common will have a high median regardless of threshold tuning. This makes the median a stable difficulty signal for source word selection and profile assignment.
+---
 
-**How difficulty is set in practice:**
-1. `freq_threshold` anchors are derived from percentiles of the global vocabulary (recomputed by `calibrate_*.py` Phase 1 if the frequency list changes).
-2. `min_length` and `max_length` remain design choices — they define the required-word length window and are tuned per profile to keep required counts in the 5–15 eligible band.
-3. `calibrate_*.py` Phase 2 finds the **eligible profiles** for each source word — those where required count falls in [5, 15]. Words with only one eligible profile are unambiguously assigned. Words with multiple eligible profiles are given a **suggested** assignment by log-scale median distance to targets derived from unambiguous and manually anchored words.
-4. **Profile assignments are manually confirmed** by editing `manual_assignments_*.json`. The calibrator reads this file on every run and never overwrites it. Manual assignments take precedence; the calibrator warns if a previously confirmed assignment drifts out of the eligible range.
-5. If no profile produces 5–15 required words, the source word needs replacement rather than threshold adjustment.
+### Frequency corpus
 
-**`freq_threshold` vs. suggestion targets — key distinction:** `freq_threshold` is the per-word floor that determines which words are *required* (vs. bonus). Suggestion targets are the expected median frequency of required words for a given profile tier — they are on the same numeric scale but describe different things. A source word may have its required words' median well above `freq_threshold`; the suggestion target tells the calibrator which profile tier that median best matches.
+Both languages use **hermitdave/FrequencyWords** (OpenSubtitles 2018, MIT licence) for both Russian and English. This is a TV/film subtitle corpus.
 
-**Relationship to D15:** With `max_freq` removed, `tooCommon` is now POS-only. The freq_threshold lower bound still determines required vs. bonus, but there is no upper bound — common content words (год, fly, back) are now valid required or bonus words at appropriate profiles rather than being silently suppressed.
+**Known bias:** subtitle corpora over-represent conversational vocabulary and under-represent concrete everyday nouns, academic words, and formal registers. A word like блокнот (notepad) may have low subtitle frequency despite being universally known. **Mitigation:** percentile anchoring means the system is self-correcting — thresholds track the corpus distribution rather than absolute counts. Words outside required still appear as bonus. The bias is most significant at P6–P10 (top 25–52% of vocab) where the tail diverges more; this is noted as a known limitation for when those profiles are built.
 
-**Impact:** `max_freq` removed from `PROFILES` in both generators. `min_length` added as a per-profile parameter (previously a global constant). `calibrate_*.py` rewritten with `get_required()`, `median_of()`, `compute_targets()`, `suggest_profile()`, and `compute_threshold_at_percentile()`. Manual assignments stored in `manual_assignments_*.json`. Phase 1 output shows corpus-anchored threshold verification (✓ when PROFILES match the percentile cutoff).
+**Why not switch to a more balanced corpus (e.g. Lyashevskaya & Sharoff for Russian, COCA for English):** The hermitdave MIT licence is unambiguous for commercial use. Academic corpora carry non-commercial or unclear licence terms. The corpus is gamewide and permanent — switching mid-development would invalidate all manual assignments and calibrated thresholds. The subtitle bias at P1–P5 (top 2–12% of vocab) is modest; the top vocabulary is similar across any serious Russian or English corpus.
+
+---
+
+### Implemented profiles: P1–P5
+
+Both languages use the same percentile spine. Raw `freq_threshold` values are what those percentiles happen to be in each corpus.
+
+| Profile | Req len | Percentile | RU ft≥ | EN ft≥ |
+|---------|---------|-----------|--------|--------|
+| P1_BEGINNER | 3–4 | top 2% | 3,925 | 37,844 |
+| P2_EASY | 3–5 | top 3% | 2,395 | 21,042 |
+| P3_MEDIUM | 4–6 | top 5% | 1,313 | 9,997 |
+| P4_HARD | 5–7 | top 8% | 669 | 4,730 |
+| P5_EXPERT | 5–8 | top 12% | 351 | 2,179 |
+
+Example required words per tier (Russian / English):
+
+| Profile | Russian | English |
+|---------|---------|---------|
+| P1 3–4 | год, рот, есть, пока | can, have, just, here |
+| P2 3–5 | место, время, много | about, think, never |
+| P3 4–6 | только, сейчас, почему | really, people, always |
+| P4 5–7 | сказать, сегодня, никогда | believe, morning, already |
+| P5 5–8 | говорить, проблема, получить | remember, actually, together |
+
+---
+
+### P6–P10 roadmap (not yet implemented)
+
+The full 10-profile design extends the same spine. P6–P10 are documented here for when they are built; parameters are not in the generators yet.
+
+| Profile | Req len | Percentile | RU ft≥ | EN ft≥ | RU src len | EN src len |
+|---------|---------|-----------|--------|--------|------------|------------|
+| P6 | 6–9 | top 18% | 174 | 982 | 11–15 | 10–14 |
+| P7 | 6–10 | top 25% | 92 | 481 | 12–17 | 11–15 |
+| P8 | 7–11 | top 33% | 49 | 230 | 14–19 | 12–16 |
+| P9 | 7–12 | top 42% | 26 | 105 | 16–22 | 13–17 |
+| P10 | 8–13 | top 52% | 13 | 44 | 18–25 | 14–18 |
+
+P6–P10 required words are longer everyday words: говорить, нормально, интересно (P6–P7); обязательно, возможность (P8); использовать, возвращаться (P9); действительно, познакомиться (P10). English equivalents: beautiful, different (P6); information, interesting (P8); relationship, conversation (P9); investigation, unfortunately (P10).
+
+**Subtitle bias note for P6–P10:** At top 25–52% of vocab the corpus tail diverges more from a balanced register corpus. If P6–P10 are built, the corpus decision should be revisited; however, it cannot be changed per-profile — the corpus is gamewide. A balanced alternative (Lyashevskaya & Sharoff for Russian; COCA or BNC for English) would be the recommended upgrade at that point if a compatible licence can be confirmed.
+
+---
+
+### Source word constraints (current)
+
+- **Length:** 5–15 letters (nouns)
+- **POS:** nouns only
+- **Minimum recognisability frequency:** ~100 (words below this are likely unknown to players)
+- **Required word count target:** 5–15 at the assigned profile (the eligibility band)
+
+**Future expansion avenues (not yet implemented):**
+- **Longer source words (16–25 letters):** viable for P8–P10. Russian has richer long-word vocabulary (up to 21 letters in quality-gated vocab: самосовершенствование, достопримечательность). English tops out around 16 (responsibility, extraterrestrial). Requires P6–P10 profiles to be active.
+- **Adjectives:** grammatically valid but letter distributions skew toward -ский/-ный/-ный (RU) or -tion/-ing (EN) endings, which may produce repetitive required sets. Worth testing.
+- **Diminutives (RU):** уменьшительно-ласкательные формы (котёнок, домик, речка) — skew shorter and simpler, potentially useful for an easier sub-profile or beginner mode.
+
+---
+
+### Calibration workflow
+
+`calibrate_*.py` runs two phases:
+
+**Phase 1 — Global vocabulary build:** Runs the full frequency list through the generator quality gate (hunspell + lemma + POS + blocklist) without any formability constraint. Results cached to `vocab_cache_*.json`. Verifies that PROFILES `freq_threshold` values match their intended percentile cutoffs (✓ within 10%).
+
+**Phase 2 — Source word evaluation:** For each source word, finds eligible profiles (required count in [5, 15]), suggests an assignment by log-scale median distance to targets derived from anchor words, and shows the required word list per eligible profile in diff format (first profile shown in full; subsequent profiles show `+` additions and `−` removals vs. the previous eligible profile).
+
+**Near-miss display:** Below each eligible profile's word list, the calibrator shows up to 5 formable words with freq in `[ft÷2, ft)` — words that just missed the required threshold. The `ft÷2` lower bound is one log-step below the threshold: on the Zipf distribution, halving and doubling are symmetric distances, so `ft÷2` captures the natural borderline zone without expanding into genuinely rare words. These are candidates for manual promotion to required via per-level overrides. This display also partially offsets the subtitle corpus bias: a word like блокнот or велосипед may have low subtitle frequency despite being universally known, and the near-miss list surfaces it for the level designer to consider rather than silently routing it to bonus.
+
+**Manual assignments:** Stored in `manual_assignments_*.json`. The calibrator reads but never overwrites this file. Manual assignments take precedence over suggestions; the calibrator warns if a confirmed assignment drifts out of the eligible range after threshold changes.
+
+**`freq_threshold` vs. suggestion targets — key distinction:** `freq_threshold` is the per-word floor determining required vs. bonus. Suggestion targets are the expected median frequency of required words for a profile tier — same numeric scale, different meaning. A source word's required-word median can sit well above `freq_threshold`; the suggestion target tells the calibrator which profile tier that median best matches.
+
+**Impact:** `PROFILES` dict in both generators updated to new parameters. `calibrate_*.py` updated with `get_near_miss()`. `manual_assignments_*.json` stores confirmed profile assignments. D13 superseded.
