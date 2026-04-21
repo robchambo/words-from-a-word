@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
+import '../engine/game_engine.dart';
+import '../models/game_state.dart';
 import '../models/language_mode.dart';
 import '../l10n/strings_ru.dart';
 import '../l10n/strings_en.dart';
@@ -140,7 +142,7 @@ class GameScreen extends StatelessWidget {
 
   Widget _buildTopBar(
     BuildContext context, {
-    required dynamic state,
+    required GameState state,
     required bool isRu,
     required LanguageMode mode,
     required int foundCount,
@@ -240,7 +242,7 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusRow(BuildContext context, dynamic state, bool isRu) {
+  Widget _buildStatusRow(BuildContext context, GameState state, bool isRu) {
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -248,18 +250,24 @@ class GameScreen extends StatelessWidget {
         children: [
           // Status message: last found word OR too-common notice
           if (state.lastFoundWord != null)
-            Expanded(
-              child: Text(
-                '✓ ${state.lastFoundWord!.toUpperCase()}  +${_pointsForWord(state.lastFoundWord!)}',
-                style: AppTheme.condensedBold.copyWith(
-                  color: AppTheme.primary,
-                  fontSize: 12,
-                ),
-              )
-                  .animate(onPlay: (c) => c.forward())
-                  .slideX(begin: -0.3, end: 0, duration: 200.ms)
-                  .fadeIn(duration: 200.ms),
-            )
+            Builder(builder: (_) {
+              final word = state.lastFoundWord!;
+              final isBonus = state.level.targetWords
+                  .any((tw) => tw.word == word && tw.isBonus);
+              final points = GameEngine.scoreWord(word, isBonus: isBonus);
+              return Expanded(
+                child: Text(
+                  '✓ ${word.toUpperCase()}  +$points',
+                  style: AppTheme.condensedBold.copyWith(
+                    color: AppTheme.primary,
+                    fontSize: 12,
+                  ),
+                )
+                    .animate(onPlay: (c) => c.forward())
+                    .slideX(begin: -0.3, end: 0, duration: 200.ms)
+                    .fadeIn(duration: 200.ms),
+              );
+            })
           else if (state.tooCommonWord != null)
             Expanded(
               child: Text(
@@ -290,18 +298,6 @@ class GameScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  int _pointsForWord(String word) {
-    final base = word.length * 10;
-    final bonus = word.length >= 6
-        ? 30
-        : word.length >= 5
-            ? 20
-            : word.length >= 4
-                ? 10
-                : 0;
-    return base + bonus;
   }
 
   Widget _languageToggle(BuildContext context, LanguageMode mode) {

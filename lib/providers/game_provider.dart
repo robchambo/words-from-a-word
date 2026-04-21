@@ -143,7 +143,8 @@ class GameProvider extends ChangeNotifier {
 
     HapticFeedback.mediumImpact();
 
-    final points = GameEngine.scoreWord(word, isBonus: false);
+    final foundTarget = s.level.targetWords.firstWhere((tw) => tw.word == word);
+    final points = GameEngine.scoreWord(word, isBonus: foundTarget.isBonus);
     final newFoundWords = [...s.foundWords, word];
     final updatedTargetWords = s.level.targetWords
         .map((tw) => tw.word == word ? tw.copyWith(isFound: true) : tw)
@@ -189,7 +190,9 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void useHint() { /* Real impl lands in Task 5 once RewardsProvider is wired. */ }
+  void useHint() {
+    // Real impl lands in Task 5 once RewardsProvider is wired.
+  }
 
   void nextLevel(LanguageMode mode) {
     final savedPendingScore = _state!.pendingScore;
