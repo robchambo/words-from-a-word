@@ -30,6 +30,8 @@ class StringsRu {
   static const String selectLetters = 'Выберите буквы';
   static const String bonusLabel = 'Бонус';
   static const String tooCommonWord = 'Слово слишком распространено!';
+  static const String bonusCounterLabel = 'Бонусных слов';
+  static const String bankedHintsLabel = 'Подсказок';
 
   static String lettersHeader(int n) {
     if (n == 1) return '1 БУКВА';

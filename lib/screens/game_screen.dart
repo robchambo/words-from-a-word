@@ -11,6 +11,7 @@ import '../providers/game_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/grid_paper_background.dart';
+import '../widgets/progress_strip.dart';
 import '../widgets/stamp_badge.dart';
 import '../widgets/tile_picker.dart';
 import '../widgets/word_slots.dart';
@@ -55,6 +56,9 @@ class GameScreen extends StatelessWidget {
                     totalCount: totalCount,
                     progress: progress,
                   ),
+
+                  // Progress strip (bonus counter + banked hints)
+                  ProgressStrip(mode: mode),
 
                   // Source word
                   Padding(
@@ -288,16 +292,21 @@ class GameScreen extends StatelessWidget {
             const Expanded(child: SizedBox()),
 
           // Hint button
-          GestureDetector(
-            onTap: () => context.read<GameProvider>().useHint(),
-            child: Text(
-              '💡 ${isRu ? StringsRu.hintButton : StringsEn.hintButton}',
-              style: AppTheme.condensedLabel.copyWith(
-                color: AppTheme.accent,
-                fontSize: 11,
+          Builder(builder: (ctx) {
+            final available = ctx.watch<GameProvider>().hintAvailable;
+            return GestureDetector(
+              onTap: available
+                  ? () => ctx.read<GameProvider>().useHint()
+                  : null,
+              child: Text(
+                '💡 ${isRu ? StringsRu.hintButton : StringsEn.hintButton}',
+                style: AppTheme.condensedLabel.copyWith(
+                  color: available ? AppTheme.accent : AppTheme.mutedFg,
+                  fontSize: 11,
+                ),
               ),
-            ),
-          ),
+            );
+          }),
         ],
       ),
     );

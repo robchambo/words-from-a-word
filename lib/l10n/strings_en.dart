@@ -30,6 +30,8 @@ class StringsEn {
   static const String selectLetters = 'Select letters';
   static const String bonusLabel = 'Bonus';
   static const String tooCommonWord = 'Word is too common!';
+  static const String bonusCounterLabel = 'Bonus words';
+  static const String bankedHintsLabel = 'Hints';
 
   static String difficultyLabel(LevelDifficulty d) {
     switch (d) {
