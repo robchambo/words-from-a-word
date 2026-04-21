@@ -1,706 +1,537 @@
-# Phase 7 — Content Implementation Plan
+# Phase 7 — Content Implementation Plan (v2 rewrite)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Grow the level library from 23 RU + 20 EN to **50 RU + 50 EN**, add a `difficulty` field (1..5) to the JSON schema, tag every level with a difficulty rating, and reorder the JSON so difficulty climbs deliberately. Provide a CLI validator that every level passes (word-formation + difficulty + required-word-count rules).
+---
 
-**Architecture:** Level data lives in `assets/data/russian_levels.json` and `assets/data/english_levels.json`. `LevelLoader.generateLevel` already infers level ID from array position (Phase 0 decision). New: schema gains optional `difficulty: int (1..5)`. `GameLevel` model gets a nullable `difficulty` field. A new Dart CLI script `tool/validate_levels.dart` runs `GameEngine.canFormWord` on every required + bonus word and enforces schema rules. CI runs this before tests.
+## v2 baseline reconciliation (2026-04-21)
 
-**Tech Stack:** Dart 3.11, existing `GameEngine.canFormWord`, no new packages.
+This plan was originally authored as a manual level-authoring effort against v1.0. It has been fully rewritten for v2. On v2, content generation is owned by an offline Python pipeline under `tools/level_generator/` (see DECISIONS.md D10–D16), calibration is driven by `calibrate_ru.py` / `calibrate_en.py` with median-based corpus anchoring, and Kat owns the generator + content authoring workflow.
+
+**This phase no longer authors words by hand.** The engineering team's responsibility is the *infrastructure* that receives Kat's generator output: the schema contract, validator CLI, level-picker difficulty display, CI gate, and the handoff brief that tells Kat exactly which source-word gaps need filling.
+
+---
+
+## Goal
+
+Scale the level library to **100 levels per language, 20 per difficulty bucket** (beginner / easy / medium / hard / expert), where:
+
+- **Source words** on the 23 RU + 20 EN levels currently in `assets/data/*.json` are kept as-is. They become the first 23 RU / 20 EN of the 100-per-language target.
+- **New source words** (77 RU + 80 EN — see distribution below) are authored + calibrated by Kat using the existing generator pipeline. Required/bonus/tooCommon word lists for the new source words are produced by `generate_ru.py` / `generate_en.py` plus optional manual overrides in `manual_assignments_{ru,en}.json`.
+- **The engineering team produces no JSON content**. Our contribution is the infrastructure that accepts Kat's output cleanly.
+
+### Target distribution per language
+
+| Difficulty | Current RU | Current EN | Target per lang | Gap RU | Gap EN |
+|---|---|---|---|---|---|
+| beginner | 4 | 5 | 20 | +16 | +15 |
+| easy | 9 | 7 | 20 | +11 | +13 |
+| medium | 6 | 5 | 20 | +14 | +15 |
+| hard | 1 | 3 | 20 | +19 | +17 |
+| expert | 3 | 0 | 20 | +17 | +20 |
+| **Totals** | 23 | 20 | 100 | **+77 RU** | **+80 EN** |
+
+---
+
+## Architecture
+
+- Level data lives in `assets/data/russian_levels.json` and `assets/data/english_levels.json`. Each entry has the shape `{ sourceWord, required, bonus, tooCommon, difficulty, levelNumber, blocked? }`.
+- `GameLevel` model on v2 already has `final LevelDifficulty difficulty` (`enum { beginner, easy, medium, hard, expert }`).
+- `LevelLoader.generateLevel` on v2 already parses `difficulty` string into the enum via `_parseDifficulty`.
+- `tools/level_generator/generate_{ru,en}.py` produces JSON from frequency lists + hunspell gate + POS filter + per-profile thresholds. Output format is already loader-compatible.
+- `tools/level_generator/calibrate_{ru,en}.py` walks source words through the generator and suggests profile assignments using log-scale median distance. Manual overrides in `manual_assignments_{ru,en}.json`.
+- **Kat's workflow** (not engineering's): pick new source-word candidates → run calibrator → review near-miss words → accept suggestions / set manual overrides → run generator → commit the updated JSON.
+- **Engineering's additions** from this phase: validator CLI for loader-side invariants, level-picker difficulty pip, CI hook, authoring/handoff docs.
+
+---
+
+## Tech Stack
+
+Dart 3.11, existing `GameEngine.canFormWord`. No new Flutter packages. Python tooling under `tools/level_generator/` is pre-existing and owned by Kat (do not modify as part of this phase).
 
 ---
 
 ## File Structure
 
 - **Create**
-  - `tool/validate_levels.dart` — CLI entry: loads both JSON files, validates every level, prints report, exits non-zero on any failure.
-  - `tool/README.md` — short doc on `dart run tool/validate_levels.dart`.
-  - `docs/LEVEL_AUTHORING.md` — guide for level authors (difficulty rubric, word-count rules, validator usage).
-  - `test/engine/level_loader_difficulty_test.dart` — verifies `difficulty` parsing + null default.
+  - `tool/validate_levels.dart` — Dart CLI: loads both JSON files, validates loader-side invariants, prints report, exits non-zero on any failure.
+  - `tool/README.md` — documents `dart run tool/validate_levels.dart` and the calibration gate.
+  - `docs/LEVEL_AUTHORING.md` — handoff guide for Kat (source-word criteria, calibrator protocol, manual-assignments protocol, commit conventions).
+  - `docs/v2/CONTENT_HANDOFF.md` — distribution gap brief for Kat (which difficulty buckets need how many more source words; example source-word seeds acceptable to the corpus).
+  - `.github/workflows/content-validate.yml` — CI gate that runs `dart run tool/validate_levels.dart` on every PR touching `assets/data/*.json`.
+  - `test/engine/level_loader_v2_test.dart` — widget-bundle-stubbed tests for `LevelLoader` behaviour against the v2 schema (difficulty parsing, tooCommon propagation, out-of-range throw — see Phase 3 Task 1 for the throw).
 
 - **Modify**
-  - `lib/models/game_state.dart` — `GameLevel` gains `int? difficulty`.
-  - `lib/engine/level_loader.dart` — parse `difficulty` field into `GameLevel`.
-  - `assets/data/russian_levels.json` — tag all 23 existing levels + add 27 new levels = 50 total.
-  - `assets/data/english_levels.json` — tag all 20 existing levels + add 30 new levels = 50 total.
-  - `pubspec.yaml` — no change (Dart `dart:io` only for CLI).
+  - `lib/widgets/level_picker_tile.dart` (will exist after Phase 3) — add difficulty pip rendering. This task is **owned by Phase 3** and only called out here for coordination.
+  - `pubspec.yaml` — no change expected.
+
+- **Do NOT modify in this phase**
+  - `assets/data/russian_levels.json`, `assets/data/english_levels.json` — content changes are Kat's, not engineering's. Engineering commits only schema-shape fixes if the validator identifies any.
+  - `tools/level_generator/**` — Kat's domain.
 
 ---
 
-## Difficulty rubric
+## Word-count and schema constraints (validator enforces)
 
-Author-facing (also put in `docs/LEVEL_AUTHORING.md`):
+Loader-side invariants, per level:
 
-| Level | Source length | Target words | Avg target length | Bonus words | Gotchas |
-|---|---|---|---|---|---|
-| 1 — Warm-up | 5-6 letters | 4-6 | 3-4 | 0-1 | No tricky letters; all obvious |
-| 2 — Easy | 6-7 | 6-8 | 3-4 | 1-2 | One moderately obscure word |
-| 3 — Medium | 7-8 | 7-10 | 4-5 | 2-3 | Words need some vocabulary |
-| 4 — Hard | 8-9 | 8-12 | 4-6 | 3-4 | At least one uncommon word |
-| 5 — Challenge | 9-10 | 10-12 | 5-7 | 4-5 | Requires flexible thinking |
+- `sourceWord` is a non-empty lowercase string.
+- `required` is a JSON array of lowercase strings. Every element is formable from `sourceWord` via `GameEngine.canFormWord`.
+- `bonus` is a JSON array of lowercase strings. Every element is formable and no duplicates vs `required`.
+- `tooCommon` is a JSON array of lowercase strings. Every element is formable and no duplicates vs `required` or `bonus`.
+- `difficulty` is one of `{beginner, easy, medium, hard, expert}`.
+- `levelNumber` is a positive integer and is unique within the (language, difficulty) bucket.
+- **Soft warnings (printed but do not fail)**: required length < 5 or > 15, bonus length > 8, missing `tooCommon` array.
 
-Target distribution across 50 levels: ~10 at 1, ~15 at 2, ~15 at 3, ~7 at 4, ~3 at 5 (rising curve with more bottom-weighted levels so early-drop-off users hit success first).
-
----
-
-## Word-count rules (hard constraints; validator enforces)
-
-- `required.length >= 4` and `<= 12`. (v1.0 cap is 12.)
-- `bonus.length <= 6`.
-- Every required word length ≥ 3.
-- No duplicates within or across `required` and `bonus`.
-- Every word must be formable from `sourceWord` via `GameEngine.canFormWord` (letter-count-respecting).
+**Note:** Per-difficulty word-count targets (e.g. "beginner has 5–7 required words") are the calibrator's concern, not the loader's. The validator does not enforce them — they're properties of `PROFILES` in `generate_{ru,en}.py`.
 
 ---
 
-## Task 1: Add `difficulty` to `GameLevel`
+## Difficulty rubric (reference only — owned by generator `PROFILES`)
 
-**Files:**
-- Modify: `lib/models/game_state.dart`
-- Create: `test/engine/level_loader_difficulty_test.dart`
+The 5-bucket LevelDifficulty enum is a stable public contract. The generator maps profile parameters (`freq_threshold`, `max_freq`, `max_length`, word-count targets) to these buckets. See DECISIONS.md D16 for the P1–P10 roadmap; the current 5 buckets are a contraction of that full scheme, as defined in `PROFILES` on each generator.
 
-- [ ] **Step 1: Write failing test**
+| Bucket | Intended feel | Source length heuristic | Required-count target |
+|---|---|---|---|
+| beginner | Warm-up; all obvious | 5–7 letters | 5–7 |
+| easy | One semi-obscure | 6–8 | 6–8 |
+| medium | Some vocabulary | 7–9 | 8–10 |
+| hard | One uncommon | 8–10 | 10–12 |
+| expert | Flexible thinking | 9–11 | 10–14 |
 
-Create `test/engine/level_loader_difficulty_test.dart`:
-
-```dart
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:slova_iz_slova/engine/level_loader.dart';
-import 'package:slova_iz_slova/models/language_mode.dart';
-
-void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() async {
-    // Stub the asset bundle
-    const jsonLevels = '''
-    [
-      {
-        "sourceWord": "strawberry",
-        "required": ["bar", "star"],
-        "bonus": ["berry"],
-        "difficulty": 3
-      },
-      {
-        "sourceWord": "apple",
-        "required": ["app", "pal"],
-        "bonus": []
-      }
-    ]
-    ''';
-    const channel = MethodChannel('flutter/assets');
-    channel.setMockMethodCallHandler((call) async {
-      if (call.method == 'load' &&
-          call.arguments == 'assets/data/english_levels.json') {
-        return ByteData.view(
-            Uint8List.fromList(jsonLevels.codeUnits).buffer);
-      }
-      return null;
-    });
-  });
-
-  test('parses difficulty when present', () async {
-    await LevelLoader.preload();
-    final level = LevelLoader.generateLevel(1, LanguageMode.english);
-    expect(level.difficulty, 3);
-  });
-
-  test('difficulty is null when missing', () async {
-    await LevelLoader.preload();
-    final level = LevelLoader.generateLevel(2, LanguageMode.english);
-    expect(level.difficulty, isNull);
-  });
-}
-```
-
-(Note: the asset mocking approach above is simplified — adapt to whatever stub pattern the existing test suite uses. If `LevelLoader.preload()` is already called in `main.dart` at startup and the existing test suite mocks differently, mirror the existing approach.)
-
-- [ ] **Step 2: Run (fail)**
-
-Run: `flutter test test/engine/level_loader_difficulty_test.dart`
-Expected: FAIL — `difficulty` field doesn't exist.
-
-- [ ] **Step 3: Add field to `GameLevel`**
-
-In `lib/models/game_state.dart`, add `difficulty` to the `GameLevel` class:
-
-```dart
-class GameLevel {
-  const GameLevel({
-    required this.id,
-    required this.sourceWord,
-    required this.tiles,
-    required this.targetWords,
-    this.difficulty,
-  });
-
-  final int id;
-  final String sourceWord;
-  final List<LetterTile> tiles;
-  final List<TargetWord> targetWords;
-  final int? difficulty;
-
-  GameLevel copyWith({...existing..., int? difficulty}) => GameLevel(
-    ...existing...,
-    difficulty: difficulty ?? this.difficulty,
-  );
-}
-```
-
-- [ ] **Step 4: Parse in `LevelLoader`**
-
-In `lib/engine/level_loader.dart`, within the JSON→`GameLevel` construction:
-
-```dart
-  final difficulty = raw['difficulty'] is int ? raw['difficulty'] as int : null;
-  return GameLevel(
-    id: levelNumber,
-    sourceWord: sourceWord,
-    tiles: tiles,
-    targetWords: targetWords,
-    difficulty: difficulty,
-  );
-```
-
-- [ ] **Step 5: Run + commit**
-
-```bash
-flutter test test/engine/level_loader_difficulty_test.dart
-# expected PASS
-
-git add lib/models/game_state.dart lib/engine/level_loader.dart test/engine/level_loader_difficulty_test.dart
-git commit -m "feat: add optional difficulty field (1..5) to GameLevel schema"
-```
+**These numbers are not enforced by engineering.** They describe Kat's calibration intent for reviewers.
 
 ---
 
-## Task 2: Build the level-validator CLI
+## Task 1: Validator CLI — `tool/validate_levels.dart`
 
 **Files:**
 - Create: `tool/validate_levels.dart`
 - Create: `tool/README.md`
+- Create: `test/tool/validate_levels_test.dart` (invokes the validator against a fixture JSON string)
 
-- [ ] **Step 1: Write the CLI**
+- [ ] **Step 1: Failing test**
+
+Create `test/tool/validate_levels_test.dart`:
+
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import '../../tool/validate_levels.dart' show validateLevelBlob, ValidationReport;
+
+void main() {
+  group('validateLevelBlob', () {
+    test('passes a well-formed level', () {
+      const jsonBlob = '''
+      [
+        {
+          "sourceWord": "strawberry",
+          "required": ["berry", "straw", "raw"],
+          "bonus": ["bay"],
+          "tooCommon": ["a", "at"],
+          "difficulty": "easy",
+          "levelNumber": 1
+        }
+      ]
+      ''';
+      final report = validateLevelBlob(jsonBlob, language: 'en');
+      expect(report.errors, isEmpty);
+    });
+
+    test('fails when a required word cannot be formed', () {
+      const jsonBlob = '''
+      [
+        {
+          "sourceWord": "cat",
+          "required": ["dog"],
+          "bonus": [],
+          "tooCommon": [],
+          "difficulty": "beginner",
+          "levelNumber": 1
+        }
+      ]
+      ''';
+      final report = validateLevelBlob(jsonBlob, language: 'en');
+      expect(report.errors, isNotEmpty);
+      expect(report.errors.first, contains('dog'));
+    });
+
+    test('fails on unknown difficulty', () {
+      const jsonBlob = '''
+      [{"sourceWord":"cat","required":["at"],"bonus":[],"tooCommon":[],"difficulty":"legendary","levelNumber":1}]
+      ''';
+      final report = validateLevelBlob(jsonBlob, language: 'en');
+      expect(report.errors.any((e) => e.contains('difficulty')), isTrue);
+    });
+
+    test('fails on duplicate levelNumber within same difficulty', () {
+      const jsonBlob = '''
+      [
+        {"sourceWord":"cat","required":["at"],"bonus":[],"tooCommon":[],"difficulty":"beginner","levelNumber":1},
+        {"sourceWord":"dog","required":["do"],"bonus":[],"tooCommon":[],"difficulty":"beginner","levelNumber":1}
+      ]
+      ''';
+      final report = validateLevelBlob(jsonBlob, language: 'en');
+      expect(report.errors.any((e) => e.contains('duplicate')), isTrue);
+    });
+
+    test('warns on required word shorter than 5 without failing', () {
+      const jsonBlob = '''
+      [{"sourceWord":"cat","required":["at","cat"],"bonus":[],"tooCommon":[],"difficulty":"beginner","levelNumber":1}]
+      ''';
+      final report = validateLevelBlob(jsonBlob, language: 'en');
+      expect(report.errors, isEmpty);
+      expect(report.warnings, isNotEmpty);
+    });
+  });
+}
+```
+
+- [ ] **Step 2: Run**
+
+`flutter test test/tool/validate_levels_test.dart -v` — expect FAIL (file doesn't exist).
+
+- [ ] **Step 3: Implement**
 
 Create `tool/validate_levels.dart`:
 
 ```dart
-// Run with: dart run tool/validate_levels.dart
-//
-// Validates every level in assets/data/{russian,english}_levels.json.
-// Exits 0 if all pass, non-zero with a per-level report otherwise.
-
 import 'dart:convert';
 import 'dart:io';
+import 'package:slova_iz_slova/engine/game_engine.dart';
 
-void main() async {
-  final files = {
-    'ru': 'assets/data/russian_levels.json',
-    'en': 'assets/data/english_levels.json',
-  };
+class ValidationReport {
+  final List<String> errors;
+  final List<String> warnings;
+  ValidationReport(this.errors, this.warnings);
+  bool get ok => errors.isEmpty;
+}
 
-  var totalErrors = 0;
+const _difficulties = {'beginner', 'easy', 'medium', 'hard', 'expert'};
 
-  for (final entry in files.entries) {
-    final mode = entry.key;
-    final path = entry.value;
-    stdout.writeln('\n=== $mode ($path) ===');
+ValidationReport validateLevelBlob(String jsonBlob, {required String language}) {
+  final errors = <String>[];
+  final warnings = <String>[];
+  final decoded = jsonDecode(jsonBlob) as List<dynamic>;
+  final seenKeys = <String, int>{}; // "$difficulty:$levelNumber" -> index
 
-    final raw = await File(path).readAsString();
-    final levels = jsonDecode(raw) as List<dynamic>;
+  for (var i = 0; i < decoded.length; i++) {
+    final lvl = decoded[i] as Map<String, dynamic>;
+    final tag = '[$language idx=$i sourceWord=${lvl['sourceWord']}]';
+    final source = lvl['sourceWord'] as String?;
+    if (source == null || source.isEmpty) {
+      errors.add('$tag missing sourceWord'); continue;
+    }
+    final required = List<String>.from(lvl['required'] ?? []);
+    final bonus = List<String>.from(lvl['bonus'] ?? []);
+    final tooCommon = List<String>.from(lvl['tooCommon'] ?? []);
+    final difficulty = lvl['difficulty'] as String?;
+    final levelNumber = lvl['levelNumber'] as int?;
 
-    stdout.writeln('levels: ${levels.length}');
+    if (difficulty == null || !_difficulties.contains(difficulty)) {
+      errors.add('$tag invalid difficulty "$difficulty"');
+    }
+    if (levelNumber == null || levelNumber < 1) {
+      errors.add('$tag invalid levelNumber "$levelNumber"');
+    } else if (difficulty != null) {
+      final key = '$difficulty:$levelNumber';
+      if (seenKeys.containsKey(key)) {
+        errors.add('$tag duplicate levelNumber $levelNumber in bucket $difficulty (also at idx=${seenKeys[key]})');
+      }
+      seenKeys[key] = i;
+    }
 
-    for (var i = 0; i < levels.length; i++) {
-      final lvl = levels[i] as Map<String, dynamic>;
-      final errors = _validateLevel(lvl, i + 1);
-      if (errors.isNotEmpty) {
-        stdout.writeln('  [FAIL] level ${i + 1} "${lvl['sourceWord']}":');
-        for (final e in errors) {
-          stdout.writeln('    - $e');
-          totalErrors++;
-        }
+    for (final w in required) {
+      if (!GameEngine.canFormWord(w, source)) {
+        errors.add('$tag required "$w" not formable from "$source"');
+      }
+      if (w.length < 5) warnings.add('$tag required "$w" is unusually short');
+      if (w.length > 15) warnings.add('$tag required "$w" is unusually long');
+    }
+    for (final w in bonus) {
+      if (!GameEngine.canFormWord(w, source)) {
+        errors.add('$tag bonus "$w" not formable from "$source"');
+      }
+      if (required.contains(w)) {
+        errors.add('$tag "$w" appears in both required and bonus');
+      }
+      if (w.length > 8) warnings.add('$tag bonus "$w" is unusually long');
+    }
+    for (final w in tooCommon) {
+      if (!GameEngine.canFormWord(w, source)) {
+        errors.add('$tag tooCommon "$w" not formable from "$source"');
+      }
+      if (required.contains(w) || bonus.contains(w)) {
+        errors.add('$tag "$w" appears in tooCommon and required/bonus');
       }
     }
 
-    // Library-size check
-    if (levels.length < 50) {
-      stdout.writeln('  [WARN] only ${levels.length} levels; target is 50');
-    }
-
-    // Difficulty distribution
-    final byDiff = <int, int>{};
-    for (final l in levels) {
-      final d = (l as Map)['difficulty'] as int?;
-      if (d != null) byDiff[d] = (byDiff[d] ?? 0) + 1;
-    }
-    stdout.writeln('  difficulty histogram: $byDiff');
-  }
-
-  if (totalErrors > 0) {
-    stdout.writeln('\nTOTAL ERRORS: $totalErrors');
-    exit(1);
-  }
-  stdout.writeln('\nAll levels valid.');
-}
-
-List<String> _validateLevel(Map<String, dynamic> lvl, int pos) {
-  final errors = <String>[];
-
-  final source = lvl['sourceWord'] as String?;
-  if (source == null || source.isEmpty) {
-    errors.add('missing sourceWord');
-    return errors;
-  }
-  final required = (lvl['required'] as List<dynamic>?)?.cast<String>() ?? [];
-  final bonus = (lvl['bonus'] as List<dynamic>?)?.cast<String>() ?? [];
-  final diff = lvl['difficulty'];
-
-  if (required.length < 4) errors.add('required has ${required.length} words (< 4)');
-  if (required.length > 12) errors.add('required has ${required.length} words (> 12)');
-  if (bonus.length > 6) errors.add('bonus has ${bonus.length} words (> 6)');
-
-  if (diff != null) {
-    if (diff is! int) errors.add('difficulty not int: $diff');
-    else if (diff < 1 || diff > 5) errors.add('difficulty out of 1..5: $diff');
-  }
-
-  // Duplicate check
-  final all = [...required, ...bonus];
-  final dupes = <String>{};
-  final seen = <String>{};
-  for (final w in all) {
-    if (!seen.add(w)) dupes.add(w);
-  }
-  if (dupes.isNotEmpty) errors.add('duplicates: $dupes');
-
-  // Word length
-  for (final w in required) {
-    if (w.length < 3) errors.add('required word too short: $w');
-  }
-
-  // canFormWord check (pure Dart — duplicates engine logic so CLI doesn't
-  // import Flutter packages)
-  for (final w in all) {
-    if (!_canFormWord(w, source)) {
-      errors.add('cannot form "$w" from "$source"');
+    if (lvl['tooCommon'] == null) {
+      warnings.add('$tag missing tooCommon array');
     }
   }
 
-  return errors;
+  return ValidationReport(errors, warnings);
 }
 
-bool _canFormWord(String word, String source) {
-  final counts = <String, int>{};
-  for (final c in source.toLowerCase().split('')) {
-    counts[c] = (counts[c] ?? 0) + 1;
+Future<void> main(List<String> args) async {
+  int anyError = 0;
+  for (final lang in ['ru', 'en']) {
+    final path = 'assets/data/${lang == 'ru' ? 'russian' : 'english'}_levels.json';
+    final blob = await File(path).readAsString();
+    final report = validateLevelBlob(blob, language: lang);
+    for (final w in report.warnings) {
+      stderr.writeln('WARN  $w');
+    }
+    for (final e in report.errors) {
+      stderr.writeln('ERROR $e');
+    }
+    stdout.writeln('$lang: ${report.errors.length} errors, ${report.warnings.length} warnings');
+    if (report.errors.isNotEmpty) anyError = 1;
   }
-  for (final c in word.toLowerCase().split('')) {
-    final n = counts[c] ?? 0;
-    if (n == 0) return false;
-    counts[c] = n - 1;
-  }
-  return true;
+  exit(anyError);
 }
 ```
 
-- [ ] **Step 2: Write `tool/README.md`**
+- [ ] **Step 4: Run**
 
-```markdown
-# Content tools
+`flutter test test/tool/validate_levels_test.dart -v` — expect GREEN.
+`dart run tool/validate_levels.dart` — expect 0 errors against v2's existing `assets/data/*.json` (both files already pass the generator's invariants, which are stricter than the loader's).
 
-## validate_levels.dart
+- [ ] **Step 5: Write `tool/README.md`**
 
-Run:
+Document the validator usage, soft/hard failure policy, and point at `tools/level_generator/` for the upstream generator pipeline.
+
+- [ ] **Step 6: Commit**
 
 ```
-dart run tool/validate_levels.dart
-```
-
-Exits 0 if both `assets/data/russian_levels.json` and `assets/data/english_levels.json`
-pass the schema and word-formation rules. Otherwise prints failures and exits 1.
-
-## Rules enforced
-
-- `required.length` between 4 and 12
-- `bonus.length` <= 6
-- `difficulty` (if present) is an int in 1..5
-- No duplicate words within or across `required` + `bonus`
-- Every word in `required` has length ≥ 3
-- Every word can be formed from `sourceWord` (letter counts respected)
-```
-
-- [ ] **Step 3: Run validator against current content**
-
-Run: `dart run tool/validate_levels.dart`
-Expected: pass for existing 23 RU + 20 EN. (WARN on under-50 count.)
-Fix any failures the validator surfaces (unlikely given v1.0 was audited in D7, but sanity-check).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add tool/validate_levels.dart tool/README.md
-git commit -m "feat: add dart CLI validator for level content"
+git add tool/validate_levels.dart tool/README.md test/tool/validate_levels_test.dart
+git commit -m "feat(tool): add Dart level validator for loader-side invariants"
 ```
 
 ---
 
-## Task 3: Author RU levels 24-40 (medium pass, difficulty 2-3)
+## Task 2: Content handoff brief for Kat — `docs/v2/CONTENT_HANDOFF.md`
 
 **Files:**
-- Modify: `assets/data/russian_levels.json`
+- Create: `docs/v2/CONTENT_HANDOFF.md`
 
-- [ ] **Step 1: Read existing RU levels**
+- [ ] **Step 1: Write the handoff brief**
 
-Open `assets/data/russian_levels.json`. Note existing source words and vibe.
+The brief contains:
 
-- [ ] **Step 2: Author 17 new levels**
+1. **Distribution gap table** (reproduce the table from the top of this phase plan: 16 beginner / 11 easy / 14 medium / 19 hard / 17 expert for RU; 15/13/15/17/20 for EN).
+2. **Source-word selection criteria**:
+   - 7–11 letters.
+   - Common enough that mid-frequency players recognise the stem word.
+   - Generates ≥ 8 required words and ≥ 2 bonus words under the target-bucket profile in `PROFILES`.
+   - Avoids overlap with the 43 existing source words in `assets/data/*.json`.
+3. **Calibrator workflow** (copy/adapt from DECISIONS.md D10 & D16):
+   - Run `python tools/level_generator/calibrate_ru.py --source <word>` (or `_en.py` for English).
+   - Review the suggested profile; accept or override via `manual_assignments_{ru,en}.json`.
+   - Inspect the near-miss list for candidates to manually promote to required.
+   - Re-run `generate_{ru,en}.py` to regenerate the level JSON.
+4. **Commit etiquette**:
+   - One commit per batch of ≤ 10 new source words, titled `content(lang): add N <difficulty> levels`.
+   - Include the generator command line and calibrator output snippet in the commit message.
+   - Do not edit `generate_*.py` or `PROFILES` without an accompanying DECISIONS.md entry.
+5. **Acceptance**:
+   - `dart run tool/validate_levels.dart` exits 0.
+   - `flutter test` passes.
+   - New levels show up correctly in the level picker.
 
-Add 17 new level objects (positions 24-40 in the array). For each:
-1. Pick a source word (6-8 letters, high-frequency Russian noun/verb).
-2. Brainstorm 6-10 required target words (length ≥3) formable from it.
-3. Add 2-3 bonus words.
-4. Tag `"difficulty": 2` or `"difficulty": 3` per rubric.
-5. Run validator after every 3-4 levels: `dart run tool/validate_levels.dart`.
+- [ ] **Step 2: Commit**
 
-Example shape:
-
-```json
-{
-  "sourceWord": "книга",
-  "required": ["нога", "кнопа", "кон", "ник", "иго"],
-  "bonus": ["гик"],
-  "difficulty": 2
-}
 ```
-
-(These are illustrative — replace with author's vetted choices.)
-
-- [ ] **Step 3: Validate + commit**
-
-Run: `dart run tool/validate_levels.dart`
-Expected: all pass. WARN still shown (not yet 50).
-
-```bash
-git add assets/data/russian_levels.json
-git commit -m "content: add 17 RU levels (difficulty 2-3) — positions 24-40"
+git add docs/v2/CONTENT_HANDOFF.md
+git commit -m "docs: content handoff brief for v1.1 level expansion"
 ```
 
 ---
 
-## Task 4: Author RU levels 41-50 (hard pass, difficulty 4-5)
-
-**Files:**
-- Modify: `assets/data/russian_levels.json`
-
-- [ ] **Step 1: Author 10 harder levels**
-
-Same process as Task 3 but targeting difficulty 4 (7 levels) and difficulty 5 (3 levels). Source words 8-10 letters. 8-12 required words. 3-5 bonus words. Include at least one uncommon word per level.
-
-- [ ] **Step 2: Validate**
-
-Run: `dart run tool/validate_levels.dart`
-Expected: all pass. RU count is now 50.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add assets/data/russian_levels.json
-git commit -m "content: add 10 RU levels (difficulty 4-5) — positions 41-50"
-```
-
----
-
-## Task 5: Tag existing RU levels 1-23 with difficulty
-
-**Files:**
-- Modify: `assets/data/russian_levels.json`
-
-- [ ] **Step 1: Manually rate each existing level**
-
-Open each existing level 1-23. Use the rubric:
-- Source length 5-6, few simple words → 1
-- Source length 6-7, standard words → 2
-- Source length 7-8, some vocabulary → 3
-- Source length 8-9, some uncommon → 4
-- Source length 9-10, tricky → 5
-
-Add `"difficulty": N` to each.
-
-- [ ] **Step 2: Validate**
-
-Run: `dart run tool/validate_levels.dart`
-Expected: all pass. Histogram shows 50 RU levels with difficulty distribution near target (roughly 10/15/15/7/3).
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add assets/data/russian_levels.json
-git commit -m "content: tag existing RU levels 1-23 with difficulty ratings"
-```
-
----
-
-## Task 6: Reorder RU levels by deliberate difficulty curve
-
-**Files:**
-- Modify: `assets/data/russian_levels.json`
-
-- [ ] **Step 1: Design the curve**
-
-Target position → difficulty:
-- 1-3: 1
-- 4-8: 1 or 2 (mostly 2)
-- 9-15: 2
-- 16-25: 2 or 3 (mostly 3)
-- 26-35: 3
-- 36-42: 3 or 4 (mostly 4)
-- 43-47: 4
-- 48-50: 5
-
-- [ ] **Step 2: Reorder the JSON array**
-
-Sort manually to match the curve. Use a Dart snippet or text editor. Keep each level object intact; only their positions change.
-
-- [ ] **Step 3: Validate**
-
-Run: `dart run tool/validate_levels.dart`
-Expected: all pass.
-
-- [ ] **Step 4: Smoke test in-game**
-
-Run: `flutter run`, pick Russian. Play levels 1, 10, 25, 40, 50. Confirm the subjective difficulty feels right at each stop. Adjust positions if needed.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add assets/data/russian_levels.json
-git commit -m "content: reorder RU levels by deliberate difficulty curve"
-```
-
----
-
-## Task 7: Author EN levels 21-40 (medium pass, difficulty 2-3)
-
-**Files:**
-- Modify: `assets/data/english_levels.json`
-
-- [ ] **Step 1: Author 20 new levels**
-
-Same process as Task 3 but English. Target difficulty 2 (10 levels) and 3 (10 levels).
-
-- [ ] **Step 2: Validate + commit**
-
-```bash
-dart run tool/validate_levels.dart
-git add assets/data/english_levels.json
-git commit -m "content: add 20 EN levels (difficulty 2-3) — positions 21-40"
-```
-
----
-
-## Task 8: Author EN levels 41-50 (hard pass, difficulty 4-5)
-
-**Files:**
-- Modify: `assets/data/english_levels.json`
-
-- [ ] **Step 1: Author 10 levels**
-
-7 at difficulty 4, 3 at difficulty 5.
-
-- [ ] **Step 2: Validate + commit**
-
-```bash
-dart run tool/validate_levels.dart
-git add assets/data/english_levels.json
-git commit -m "content: add 10 EN levels (difficulty 4-5) — positions 41-50"
-```
-
----
-
-## Task 9: Tag existing EN levels 1-20 with difficulty
-
-Same as Task 5 but English. Commit: `content: tag existing EN levels 1-20 with difficulty ratings`.
-
----
-
-## Task 10: Reorder EN levels by deliberate difficulty curve
-
-Same as Task 6 but English. Commit: `content: reorder EN levels by deliberate difficulty curve`.
-
----
-
-## Task 11: Expose difficulty in level picker
-
-**Files:**
-- Modify: `lib/screens/level_picker_screen.dart` (from Phase 3)
-- Modify: `lib/widgets/level_picker_tile.dart` (from Phase 3)
-
-- [ ] **Step 1: Show difficulty as pips**
-
-In `LevelPickerTile`, if `level.difficulty != null`, render 1-5 small dots below the level number, filled up to the difficulty value. Use `AppTheme.primary` for filled, `AppTheme.muted` for empty.
-
-```dart
-Widget _difficultyPips(int difficulty) {
-  return Row(
-    mainAxisSize: MainAxisSize.min,
-    children: List.generate(5, (i) => Container(
-      width: 4, height: 4,
-      margin: const EdgeInsets.symmetric(horizontal: 1),
-      decoration: BoxDecoration(
-        color: i < difficulty ? AppTheme.primary : AppTheme.muted,
-        shape: BoxShape.circle,
-      ),
-    )),
-  );
-}
-```
-
-- [ ] **Step 2: Add Semantics label**
-
-Wrap the pips in `Semantics(label: 'Difficulty $difficulty of 5')` for accessibility (Phase 8 will audit).
-
-- [ ] **Step 3: Analyze + commit**
-
-```bash
-flutter analyze
-git add lib/widgets/level_picker_tile.dart
-git commit -m "feat: show difficulty pips in level picker tiles"
-```
-
----
-
-## Task 12: Add content-validator to CI
-
-**Files:**
-- `.github/workflows/ci.yml` (defined in Phase 9; if not yet present, defer this task to Phase 9's CI step)
-
-- [ ] **Step 1: Add validator step**
-
-In `.github/workflows/ci.yml` under the test job, add:
-
-```yaml
-      - name: Validate level content
-        run: dart run tool/validate_levels.dart
-```
-
-Place before `flutter analyze`.
-
-- [ ] **Step 2: Push + verify**
-
-Push and confirm the step runs + passes on CI.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add .github/workflows/ci.yml
-git commit -m "ci: add level-validator step"
-```
-
----
-
-## Task 13: Write authoring guide
+## Task 3: `docs/LEVEL_AUTHORING.md` — permanent authoring guide
 
 **Files:**
 - Create: `docs/LEVEL_AUTHORING.md`
 
-- [ ] **Step 1: Draft the doc**
+This guide is broader than the v1.1-specific handoff — it documents the level-authoring workflow for the project going forward, not just the 100-per-lang push. Target audience: any future content author who inherits Kat's pipeline.
 
-Create `docs/LEVEL_AUTHORING.md`:
+- [ ] **Step 1: Write the guide**
 
-```markdown
-# Level authoring guide
+Sections:
 
-## Where
+1. **Pipeline overview** — generator → calibrator → manual overrides → validator → app.
+2. **Difficulty rubric** (copy from this plan).
+3. **PROFILES reference** — link to `tools/level_generator/generate_{ru,en}.py`; describe each profile parameter.
+4. **When to rebuild the corpus** — frequency-list sources, when re-fetching is needed.
+5. **Manual assignments** — when to override a calibrator suggestion, how to document in the JSON.
+6. **Validator usage** — `dart run tool/validate_levels.dart`.
+7. **CI** — the `.github/workflows/content-validate.yml` gate and how to debug failures.
+8. **Known pitfalls** — ё vs е distinctness, language-specific function-word filters, hunspell dictionary updates.
 
-- Russian: `assets/data/russian_levels.json`
-- English: `assets/data/english_levels.json`
+- [ ] **Step 2: Commit**
 
-## Schema
-
-```json
-{
-  "sourceWord": "книга",
-  "required": ["нога", "кон", "ник", "иго"],
-  "bonus": ["гик"],
-  "difficulty": 2
-}
+```
+git add docs/LEVEL_AUTHORING.md
+git commit -m "docs: permanent level-authoring guide"
 ```
 
-- `sourceWord`: 5-10 letters. Everyday, recognizable.
-- `required`: 4-12 words; length ≥ 3.
-- `bonus`: 0-6 words; any length ≥ 3.
-- `difficulty`: 1-5 per rubric below.
+---
 
-## Difficulty rubric
+## Task 4: CI content-validator — `.github/workflows/content-validate.yml`
 
-| Level | Source length | Targets | Avg len | Bonus | Gotchas |
-|-|-|-|-|-|-|
-| 1 | 5-6 | 4-6 | 3-4 | 0-1 | No tricky letters |
-| 2 | 6-7 | 6-8 | 3-4 | 1-2 | One moderate obscurity |
-| 3 | 7-8 | 7-10 | 4-5 | 2-3 | Needs vocab |
-| 4 | 8-9 | 8-12 | 4-6 | 3-4 | Uncommon words |
-| 5 | 9-10 | 10-12 | 5-7 | 4-5 | Flex thinking |
+**Files:**
+- Create: `.github/workflows/content-validate.yml`
 
-## Workflow
+- [ ] **Step 1: Write the workflow**
 
-1. Pick a source word.
-2. Brainstorm 6-12 required + 2-5 bonus.
-3. Add to JSON.
-4. Run `dart run tool/validate_levels.dart`.
-5. Fix any failures.
-6. Open `flutter run`, play the level. Adjust if pacing feels off.
-7. Commit with message `content: <short description>`.
+Triggers on PR + push to any branch. Runs `dart run tool/validate_levels.dart`. Fails the build on non-zero exit.
 
-## Tips
+```yaml
+name: content-validate
+on:
+  pull_request:
+    paths:
+      - 'assets/data/**'
+      - 'tool/validate_levels.dart'
+      - 'lib/engine/game_engine.dart'
+  push:
+    branches: [v2, main]
 
-- Look for high-utility letters (RU: р, т, н, а, е, и, о; EN: s, e, a, r, t, i, n).
-- Avoid obscure archaic words unless difficulty 5.
-- Bonus words should feel like discoveries — surprising but fair.
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.6'
+          channel: stable
+      - run: flutter pub get
+      - run: dart run tool/validate_levels.dart
 ```
 
 - [ ] **Step 2: Commit**
 
-```bash
-git add docs/LEVEL_AUTHORING.md
-git commit -m "docs: add level authoring guide"
+```
+git add .github/workflows/content-validate.yml
+git commit -m "ci: gate PRs on level-data validator"
+```
+
+Note: this is one of two CI workflows Phase 9 also references. Coordinate with the main CI workflow so they don't overlap; this one is level-data-specific and can coexist.
+
+---
+
+## Task 5: `LevelLoader` v2 test coverage
+
+**Files:**
+- Create: `test/engine/level_loader_v2_test.dart`
+
+Covers:
+- Difficulty enum parsing (each string → correct enum).
+- Null / unknown difficulty → `LevelDifficulty.beginner` default.
+- tooCommon array propagation to `GameLevel.tooCommon`.
+- Unformable words silently dropped at load (the existing safety net).
+- `levelCount(mode)` returns correct count.
+- `generateLevel(levelNumber, mode)` for in-range levels returns a valid `GameLevel` with `sourceWord == sourceWord` (identity check).
+
+Note: out-of-range throw behaviour is covered by Phase 3 Task 1 (`LevelNotFoundException`). Do not duplicate that here.
+
+- [ ] **Step 1: Write failing tests** with asset-bundle stub (see pattern from original Phase 7 plan Task 1 Step 1 in the git history if needed).
+
+- [ ] **Step 2: Run + confirm red**
+
+- [ ] **Step 3: Implement — no code changes expected; tests verify existing v2 behaviour.**
+
+- [ ] **Step 4: Run + confirm green.**
+
+- [ ] **Step 5: Commit**
+
+```
+git add test/engine/level_loader_v2_test.dart
+git commit -m "test(loader): cover v2 LevelLoader invariants"
 ```
 
 ---
 
-## Task 14: Final verification
+## Task 6: Final verification (phase gate)
 
-- [ ] **Step 1: Validator passes**
+**Only runs after Kat's content arrives** and the validator + CI are green on the combined output.
 
-Run: `dart run tool/validate_levels.dart`
-Expected: zero errors, 50 RU + 50 EN, histograms near target distribution.
+- [ ] **Step 1: Run validator**
 
-- [ ] **Step 2: Analyze + test**
+`dart run tool/validate_levels.dart` — expect 0 errors across both files.
 
-Run: `flutter analyze && flutter test`
-Expected: clean.
+- [ ] **Step 2: Verify distribution**
 
-- [ ] **Step 3: In-game spot checks**
-
-Play RU level 1, 25, 50. Play EN level 1, 25, 50. Confirm:
-- Each level loads without error.
-- Difficulty pips match JSON.
-- Curve feels progressive.
-
-- [ ] **Step 4: Tag**
+Run a one-off script or manual grep to confirm the target distribution is met:
 
 ```bash
-git tag phase-7-content-complete
+for lang in russian english; do
+  echo "=== $lang ==="
+  for diff in beginner easy medium hard expert; do
+    count=$(grep -oE "\"difficulty\"\s*:\s*\"$diff\"" assets/data/${lang}_levels.json | wc -l)
+    echo "  $diff: $count / 20"
+  done
+done
 ```
+
+Expected: each bucket shows 20/20 for each language.
+
+- [ ] **Step 3: Smoke test on device**
+
+Launch the game in both languages. Play at least one level from each difficulty bucket. Confirm:
+- Level picker shows 100 levels per language with correct difficulty pips (Phase 3 dependency).
+- Library-complete screen fires after completing level 100 (Phase 3 dependency).
+- No crashes, no silently dropped words (check via `debugPrint` logs).
+
+- [ ] **Step 4: Tag + commit final**
+
+```
+git tag phase/7/complete
+```
+
+No code commit here — the milestone is Kat's content merging into v2.
 
 ---
 
-## Exit criteria recap
+## Out of scope
 
-- 50 RU + 50 EN levels in JSON.
-- Every level has `difficulty: 1..5`.
-- Levels ordered by deliberate curve (roughly 1→5).
-- `dart run tool/validate_levels.dart` exits 0.
-- Authoring guide exists.
-- Level picker shows difficulty pips.
+- Level-picker UI for difficulty pips — owned by Phase 3 (`lib/widgets/level_picker_tile.dart`).
+- Achievements based on difficulty completion (e.g. "complete 5 expert levels") — owned by Phase 3 achievements engine.
+- Per-profile (P1–P10) expansion beyond the 5-bucket enum — deferred until DECISIONS.md D16's P1–P10 roadmap is ready to ship.
+- Generator modifications or new language support — Kat's domain, separate project scope.
+
+---
+
+## Dependencies
+
+- **Phase 3** must land before Task 6 can fully verify (needs level picker + library-complete screen).
+- **Phase 9** CI setup overlaps with Task 4 — coordinate to avoid duplicate workflows.
+- **Kat's content delivery** must land before Task 6. If Kat's work is delayed, Tasks 1–5 can still ship (infrastructure only) and Task 6 stays open until content arrives.
+
+---
+
+## Risk register
+
+| Risk | Mitigation |
+|---|---|
+| Kat's output fails the Dart validator (divergent schema assumptions) | Task 4 CI gates it on every PR. Loop back to update either the validator or the generator based on root cause. |
+| 100-per-lang is more than Kat can deliver in one window | Accept a phased rollout: ship at 50/lang first, lift to 100/lang in v1.2. Level picker handles both sizes without code changes. |
+| Generator regressions break existing JSON (if Kat edits `PROFILES`) | DECISIONS.md D10/D16 + CI validator. If `PROFILES` changes, require a DECISIONS.md entry and full re-calibration. |
+| Russian ё vs е inconsistency | Document in `docs/LEVEL_AUTHORING.md` (Task 3). Validator could be extended to warn — not required for v1.1. |
+
+---
+
+## Effort estimate
+
+| Task | Effort |
+|---|---|
+| 1. Validator CLI | 2–3 h |
+| 2. Content handoff brief | 1 h |
+| 3. Permanent authoring guide | 1–2 h |
+| 4. CI workflow | 30 min |
+| 5. Loader test coverage | 1–2 h |
+| 6. Final verification | 30 min (excluding Kat's content window) |
+| **Total (engineering only)** | **~7 h** |
+
+Kat's content authoring is not in this budget.

@@ -2,6 +2,43 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+---
+
+## v2 baseline reconciliation (2026-04-21)
+
+This plan was originally authored on top of the v1.0 `main` baseline. It is now being executed on top of `v2`, which already contains Kat's hint-reveal UX redesign (commit `17e8bdc`) and related fixes (`2826af6`). That changes what's pre-existing vs. what needs building.
+
+**Directive:** **use this plan's algorithm, not v2's coded algorithm.** Where they conflict, the plan wins.
+
+**Algorithm conflict (for execution awareness):**
+
+| Aspect | v2's coded `GameProvider.useHint()` | This plan's `pickSafeHintLetter` (Task 4/5) |
+|---|---|---|
+| Scope | Global across all unfound required words | Single position in a single word |
+| Selection | Letter-character with most occurrences across board | Random pick from "safe" candidate positions |
+| Safety check | None | Word must have ≥2 unrevealed letters before reveal |
+| Effect per hint | Reveals every occurrence of one character everywhere | Reveals exactly one letter at one index |
+
+Execution: Task 4 introduces `pickSafeHintLetter` as a pure function; Task 5 **replaces** v2's existing `useHint()` body with a call to it. v2's selection logic in `lib/providers/game_provider.dart` lines 192–238 is deleted.
+
+**Pre-existing on v2 that this plan can reuse:**
+
+- `TargetWord.revealedIndices: Set<int>` already exists on each word. This IS the plan's per-word `revealedPositions`. Task 2 does **not** need to introduce a separate `revealedPositions: Map<String, Set<int>>` on `GameState` — instead, `pickSafeHintLetter` and the reveal wiring operate on `level.targetWords[i].revealedIndices` directly, and `Task 2`'s `revealedPositions` field is interpreted as "the collective view across all target words" (either removed from the task or derived via a getter).
+- `WordSlotItem` already renders revealed letters in amber with amber underline (`lib/widgets/word_slot_item.dart`). Task 8 reduces to a verification pass, not a redesign — confirm the underline colour token matches GDD §4.5 and pass contrast audit.
+- `GameState.hintedLetterCounts: Map<String, int>` exists. Task 2 deletes it (it's the v2-coded algorithm's bookkeeping and has no counterpart in the plan's algorithm).
+- `WordValidationResult.tooCommon` + `GameLevel.tooCommon: List<String>` + the `tooCommonWord` flash on `GameState` are already implemented (commit `f57f068`+). No new work here; bonus counter (Task 6) just needs to be careful not to double-count tooCommon hits.
+- `LevelDifficulty` enum exists on `GameLevel`. The plan's bonus-word scoring is unaffected.
+
+**Tasks that survive unchanged:** 1 (scoreWord), 3 (pendingScore wiring), 4 (`pickSafeHintLetter`), 5 (`useHint` rewrite), 6 (bonus counter), 7 (bankAndAdvance), 9 (ProgressStrip), 10 (hint button gating), 11 (FreeHintEarnedOverlay), 12 (strings rewrite), 13 (daily refill), 14 (verification).
+
+**Tasks that modify behaviour from the as-written plan:**
+- **Task 2** — do NOT add `revealedPositions: Map<String, Set<int>>` as a new field on `GameState`. Instead: (a) delete `hintedLetterCounts` from `GameState`; (b) delete `hintsRemaining` and `score`; (c) add `pendingScore`, `revealedTileIds`, `pendingRewardedAdPrompt`, `isReplayMode`, `libraryComplete`; (d) keep using `level.targetWords[i].revealedIndices` as the per-word revealed-position store. If `pickSafeHintLetter` needs a flat `Map<String, Set<int>>` for its signature, construct it at the call site: `{ for (final tw in state.level.targetWords) tw.word: tw.revealedIndices }`.
+- **Task 8** — becomes a verification + contrast-audit pass, not an implementation task. If the existing amber on amber in `word_slot_item.dart` already satisfies the Phase 8 contrast policy, commit a note and move on.
+
+**Everything else proceeds as written.**
+
+---
+
 **Goal:** Replace v1.0 scoring + hint mechanics with the v1.1 economy from GDD §4.4 and §4.5 — pending-and-bank scoring, flat 15-pt bonus words, safe-letter hints, free-hint slot, bonus-word accumulator.
 
 **Architecture:** `GameState` drops `score` + `hintsRemaining` and adds `pendingScore`, `revealedTileIds`, and a `revealedPositions: Map<String, Set<int>>` (keyed by target word, value = set of revealed letter indices). `GameEngine` gains `pickSafeHintLetter()` — a pure function with seeded RNG. `GameProvider` reads `RewardsProvider` for hint availability and calls `onLevelComplete` to bank. Two new widgets: `ProgressStrip` (top-of-game bonus counter + banked hints), `FreeHintEarnedOverlay` (celebratory popup driven by a `ValueNotifier<int>` tick source on `RewardsProvider`).
