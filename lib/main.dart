@@ -37,7 +37,9 @@ void main() async {
         ChangeNotifierProvider<SettingsProvider>.value(value: settings),
         ChangeNotifierProvider<RewardsProvider>.value(value: rewards),
         Provider<AdGateway>.value(value: adGateway),
-        ChangeNotifierProvider<GameProvider>(create: (_) => GameProvider()),
+        ChangeNotifierProvider<GameProvider>(
+          create: (_) => GameProvider(rewards: rewards),
+        ),
       ],
       child: const SlovaApp(),
     ),
