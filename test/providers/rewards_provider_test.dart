@@ -206,4 +206,57 @@ void main() {
 
     expect(p.purchasedHintCount, 5);
   });
+
+  group('incrementBonusCounter', () {
+    test('increments up to 10', () async {
+      final p = RewardsProvider();
+      await p.load();
+
+      for (var i = 0; i < 9; i++) {
+        p.incrementBonusCounter();
+      }
+      expect(p.bonusWordCounter, 9);
+      expect(p.freeHintSlot, 0);
+
+      p.incrementBonusCounter();
+
+      expect(p.bonusWordCounter, 0, reason: 'resets after threshold');
+      expect(p.freeHintSlot, 1, reason: 'earned one hint');
+    });
+
+    test('freezes at 10 if slot already full', () async {
+      SharedPreferences.setMockInitialValues({
+        'rewards.freeHintSlot': 1,
+        'rewards.bonusWordCounter': 9,
+      });
+      final p = RewardsProvider();
+      await p.load();
+
+      p.incrementBonusCounter();
+
+      expect(p.bonusWordCounter, 10, reason: 'frozen at threshold');
+      expect(p.freeHintSlot, 1);
+
+      p.incrementBonusCounter();
+
+      expect(p.bonusWordCounter, 10);
+    });
+  });
+
+  test('markPremium raises slot cap', () async {
+    SharedPreferences.setMockInitialValues({
+      'rewards.freeHintSlot': 1,
+      'rewards.lastDailyClaimedOn': '2026-04-15',
+    });
+    final fakeNow = DateTime(2026, 4, 16);
+    final p = RewardsProvider(clock: () => fakeNow);
+    await p.load();
+
+    p.markPremium();
+    p.maybeRefillDailyHint();
+
+    expect(p.premium, isTrue);
+    expect(p.freeHintSlot, 2,
+        reason: 'cap is now 3; today\'s refill can bump 1->2');
+  });
 }

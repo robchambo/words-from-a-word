@@ -16,7 +16,6 @@ class RewardsProvider extends ChangeNotifier {
   static const int _currentSchemaVersion = 1;
   static const int _freeHintSlotCapFree = 1;
   static const int _freeHintSlotCapPremium = 3;
-  // ignore: unused_field
   static const int _bonusRefillThreshold = 10;
 
   // --- Persisted fields --------------------------------------------------
@@ -170,6 +169,35 @@ class RewardsProvider extends ChangeNotifier {
   void addPurchasedHints(int n) {
     if (n <= 0) return;
     purchasedHintCount += n;
+    notifyListeners();
+    save();
+  }
+
+  /// Record a bonus-word find. Bumps the counter; on reaching the refill
+  /// threshold, decrements by 10 and grants a free hint (unless slot full,
+  /// in which case the counter freezes at 10 until the slot drains).
+  void incrementBonusCounter() {
+    if (bonusWordCounter >= _bonusRefillThreshold) {
+      // frozen — nothing to do
+      return;
+    }
+    bonusWordCounter += 1;
+    if (bonusWordCounter >= _bonusRefillThreshold) {
+      if (freeHintSlot < _slotCap) {
+        bonusWordCounter = 0;
+        freeHintSlot += 1;
+      }
+      // else keep at 10, slot is full; caller owns popup UX
+    }
+    notifyListeners();
+    save();
+  }
+
+  /// Set premium flag. Does not itself refill — call
+  /// `maybeRefillDailyHint()` or let the next level-start call do it.
+  void markPremium() {
+    if (premium) return;
+    premium = true;
     notifyListeners();
     save();
   }
