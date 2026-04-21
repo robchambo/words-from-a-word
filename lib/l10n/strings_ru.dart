@@ -72,4 +72,13 @@ class StringsRu {
   static const String levelCompleteTitle = 'Уровень пройден!';
   static const String nextLevelButton = 'Следующий уровень';
   static const String wordsFoundLabel = 'слов найдено';
+
+  // Settings screen
+  static const String settingsTitle = 'Настройки';
+  static const String settingsLanguage = 'Язык';
+  static const String settingsRules = 'Как играть';
+  static const String settingsMute = 'Выключить звук';
+  static const String settingsRemoveAds = 'Убрать рекламу';
+  static const String settingsRestore = 'Восстановить покупки';
+  static const String settingsPrivacy = 'Политика конфиденциальности';
 }

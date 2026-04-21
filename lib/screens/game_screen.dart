@@ -21,7 +21,7 @@ class GameScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final game = context.watch<GameProvider>();
     final settings = context.watch<SettingsProvider>();
-    final mode = settings.languageMode;
+    final mode = settings.languageMode ?? LanguageMode.russian;
     final isRu = mode == LanguageMode.russian;
 
     if (!game.isReady) {
