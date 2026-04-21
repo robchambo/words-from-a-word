@@ -6,6 +6,19 @@ import '../models/game_state.dart';
 import '../models/language_mode.dart';
 import 'game_engine.dart';
 
+/// Thrown when [LevelLoader.generateLevel] is called with a [levelNumber]
+/// beyond the end of the bundled level list for the given [LanguageMode].
+class LevelNotFoundException implements Exception {
+  final int levelNumber;
+  final LanguageMode mode;
+
+  const LevelNotFoundException({required this.levelNumber, required this.mode});
+
+  @override
+  String toString() =>
+      'LevelNotFoundException: level $levelNumber not found for mode $mode';
+}
+
 LevelDifficulty _parseDifficulty(String? value) {
   switch (value) {
     case 'easy':
@@ -40,10 +53,21 @@ class LevelLoader {
     return defs.length;
   }
 
+  /// Returns the total number of levels available for [mode].
+  static int librarySize(LanguageMode mode) {
+    final defs =
+        mode == LanguageMode.russian ? _russianDefs! : _englishDefs!;
+    return defs.length;
+  }
+
   static GameLevel generateLevel(int levelNumber, LanguageMode mode) {
     final defs =
         mode == LanguageMode.russian ? _russianDefs! : _englishDefs!;
-    final def = defs[(levelNumber - 1) % defs.length];
+    final index = levelNumber - 1;
+    if (index < 0 || index >= defs.length) {
+      throw LevelNotFoundException(levelNumber: levelNumber, mode: mode);
+    }
+    final def = defs[index];
 
     final sourceWord = def['sourceWord'] as String;
 
