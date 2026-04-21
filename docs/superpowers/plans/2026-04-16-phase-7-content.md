@@ -436,11 +436,68 @@ Covers:
 
 Note: out-of-range throw behaviour is covered by Phase 3 Task 1 (`LevelNotFoundException`). Do not duplicate that here.
 
-- [ ] **Step 1: Write failing tests** with asset-bundle stub (see pattern from original Phase 7 plan Task 1 Step 1 in the git history if needed).
+- [ ] **Step 1: Write failing tests** with asset-bundle stub.
+
+```dart
+import 'dart:convert';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:slova_iz_slova/engine/level_loader.dart';
+import 'package:slova_iz_slova/models/game_state.dart';
+import 'package:slova_iz_slova/models/language_mode.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const fixture = '''
+  [
+    {"sourceWord":"strawberry","required":["berry","straw"],"bonus":["bay"],"tooCommon":["a"],"difficulty":"easy","levelNumber":1},
+    {"sourceWord":"orchestra","required":["chest","rose"],"bonus":[],"tooCommon":[],"difficulty":"bogus","levelNumber":2}
+  ]
+  ''';
+
+  setUp(() {
+    ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+      'flutter/assets',
+      (message) async {
+        final key = utf8.decode(message!.buffer.asUint8List());
+        if (key == 'assets/data/english_levels.json') {
+          return ByteData.sublistView(Uint8List.fromList(utf8.encode(fixture)));
+        }
+        return null;
+      },
+    );
+    LevelLoader.resetForTest();
+  });
+
+  test('parses difficulty string into enum', () async {
+    final lvl = await LevelLoader.generateLevel(1, LanguageMode.english);
+    expect(lvl.difficulty, LevelDifficulty.easy);
+  });
+
+  test('unknown difficulty defaults to beginner', () async {
+    final lvl = await LevelLoader.generateLevel(2, LanguageMode.english);
+    expect(lvl.difficulty, LevelDifficulty.beginner);
+  });
+
+  test('tooCommon array propagates to GameLevel', () async {
+    final lvl = await LevelLoader.generateLevel(1, LanguageMode.english);
+    expect(lvl.tooCommon, contains('a'));
+  });
+
+  test('levelCount returns length of the loaded array', () async {
+    expect(await LevelLoader.levelCount(LanguageMode.english), 2);
+  });
+}
+```
 
 - [ ] **Step 2: Run + confirm red**
 
-- [ ] **Step 3: Implement — no code changes expected; tests verify existing v2 behaviour.**
+`flutter test test/engine/level_loader_v2_test.dart -v` — expect FAIL until `LevelLoader.resetForTest()` exists (it may already; if missing add a trivial `@visibleForTesting static void resetForTest() { _cache.clear(); }` on `LevelLoader`).
+
+- [ ] **Step 3: Implement**
+
+If `resetForTest()` is missing, add it. Otherwise no code change — the tests document existing v2 behaviour.
 
 - [ ] **Step 4: Run + confirm green.**
 
