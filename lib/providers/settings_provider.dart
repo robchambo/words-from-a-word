@@ -7,7 +7,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _kLanguageMode = 'language_mode';
   static const _kMuted = 'settings.muted';
 
-  LanguageMode _languageMode = LanguageMode.russian;
+  LanguageMode _languageMode = LanguageMode.english;
   LanguageMode get languageMode => _languageMode;
 
   bool _muted = false;
@@ -16,11 +16,12 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_kLanguageMode);
-    if (saved == 'english') {
-      _languageMode = LanguageMode.english;
-    } else {
+    if (saved == 'russian') {
       _languageMode = LanguageMode.russian;
+    } else if (saved == 'english') {
+      _languageMode = LanguageMode.english;
     }
+    // else: no saved value — keep the default (LanguageMode.english)
     _muted = prefs.getBool(_kMuted) ?? false;
     notifyListeners();
   }
