@@ -15,6 +15,7 @@ import '../widgets/progress_strip.dart';
 import '../widgets/stamp_badge.dart';
 import '../widgets/tile_picker.dart';
 import '../widgets/word_slots.dart';
+import '../widgets/free_hint_earned_overlay.dart';
 import '../widgets/level_complete_overlay.dart';
 
 class GameScreen extends StatelessWidget {
@@ -140,6 +141,8 @@ class GameScreen extends StatelessWidget {
                     game.nextLevel(mode);
                   },
                 ),
+
+              FreeHintEarnedOverlay(mode: mode),
             ],
           ),
         ),

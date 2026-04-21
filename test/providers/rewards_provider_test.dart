@@ -323,4 +323,30 @@ void main() {
 
     expect(p.achievementsUnlocked, {'first_word', 'first_level'});
   });
+
+  group('freeHintEarnedTicks', () {
+    test('fires tick when bonus counter fills and slot is not full', () async {
+      final p = RewardsProvider();
+      await p.load();
+      expect(p.freeHintEarnedTicks.value, 0);
+      for (var i = 0; i < 10; i++) {
+        p.incrementBonusCounter();
+      }
+      expect(p.freeHintSlot, 1);
+      expect(p.freeHintEarnedTicks.value, 1);
+    });
+
+    test('does not fire when slot cap is already hit', () async {
+      SharedPreferences.setMockInitialValues({
+        'rewards.freeHintSlot': 1,
+        'rewards.bonusWordCounter': 9,
+      });
+      final p = RewardsProvider();
+      await p.load();
+      expect(p.freeHintEarnedTicks.value, 0);
+      p.incrementBonusCounter(); // bonusWordCounter 9->10; slot already full; no tick
+      expect(p.freeHintSlot, 1);
+      expect(p.freeHintEarnedTicks.value, 0);
+    });
+  });
 }
