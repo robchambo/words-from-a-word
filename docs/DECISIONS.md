@@ -265,11 +265,11 @@ The full 10-profile design extends the same spine. P6–P10 are documented here 
 
 | Profile | Req len | Percentile | RU ft≥ | EN ft≥ | RU src len | EN src len |
 |---------|---------|-----------|--------|--------|------------|------------|
-| P6 | 6–9 | top 18% | 174 | 982 | 11–15 | 10–14 |
-| P7 | 6–10 | top 25% | 92 | 481 | 12–17 | 11–15 |
-| P8 | 7–11 | top 33% | 49 | 230 | 14–19 | 12–16 |
-| P9 | 7–12 | top 42% | 26 | 105 | 16–22 | 13–17 |
-| P10 | 8–13 | top 52% | 13 | 44 | 18–25 | 14–18 |
+| P6 | 6–9 | top 20% | 144 | 783 | 11–15 | 10–14 |
+| P7 | 6–10 | top 27% | 78 | 397 | 12–17 | 11–15 |
+| P8 | 7–11 | top 35% | 42 | 193 | 14–19 | 12–16 |
+| P9 | 7–12 | top 44% | 22 | 88 | 16–22 | 13–17 |
+| P10 | 8–13 | top 54% | 12 | 37 | 18–25 | 14–18 |
 
 P6–P10 required words are longer everyday words: говорить, нормально, интересно (P6–P7); обязательно, возможность (P8); использовать, возвращаться (P9); действительно, познакомиться (P10). English equivalents: beautiful, different (P6); information, interesting (P8); relationship, conversation (P9); investigation, unfortunately (P10).
 
