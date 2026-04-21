@@ -78,4 +78,43 @@ class GameEngine {
     }
     return a;
   }
+
+  static SafeHintResult? pickSafeHintLetter({
+    required List<TargetWord> targetWords,
+    required Map<String, Set<int>> revealedPositions,
+    required Random rng,
+  }) {
+    final candidates = <SafeHintResult>[];
+    for (final tw in targetWords) {
+      if (tw.isFound) continue;
+      final revealed = revealedPositions[tw.word] ?? const <int>{};
+      final unrevealed = <int>[];
+      for (var i = 0; i < tw.word.length; i++) {
+        if (!revealed.contains(i)) unrevealed.add(i);
+      }
+      // Safe if at least 2 unrevealed positions remain —
+      // revealing one leaves ≥ 1 so the player still has to find the last letter.
+      if (unrevealed.length < 2) continue;
+      for (final i in unrevealed) {
+        candidates.add(SafeHintResult(
+          wordKey: tw.word,
+          position: i,
+          letter: tw.word[i],
+        ));
+      }
+    }
+    if (candidates.isEmpty) return null;
+    return candidates[rng.nextInt(candidates.length)];
+  }
+}
+
+class SafeHintResult {
+  final String wordKey;
+  final int position;
+  final String letter;
+  const SafeHintResult({
+    required this.wordKey,
+    required this.position,
+    required this.letter,
+  });
 }
