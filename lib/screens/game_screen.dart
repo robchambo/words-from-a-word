@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
+import '../engine/game_engine.dart';
+import '../models/game_state.dart';
 import '../models/language_mode.dart';
 import '../l10n/strings_ru.dart';
 import '../l10n/strings_en.dart';
@@ -9,9 +11,11 @@ import '../providers/game_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/grid_paper_background.dart';
+import '../widgets/progress_strip.dart';
 import '../widgets/stamp_badge.dart';
 import '../widgets/tile_picker.dart';
 import '../widgets/word_slots.dart';
+import '../widgets/free_hint_earned_overlay.dart';
 import '../widgets/level_complete_overlay.dart';
 
 class GameScreen extends StatelessWidget {
@@ -53,6 +57,9 @@ class GameScreen extends StatelessWidget {
                     totalCount: totalCount,
                     progress: progress,
                   ),
+
+                  // Progress strip (bonus counter + banked hints)
+                  ProgressStrip(mode: mode),
 
                   // Source word
                   Padding(
@@ -126,11 +133,16 @@ class GameScreen extends StatelessWidget {
               // Level complete overlay
               if (state.isLevelComplete)
                 LevelCompleteOverlay(
-                  score: state.score,
+                  score: state.pendingScore,
                   wordsFound: state.foundWords.length,
                   languageMode: mode,
-                  onNextLevel: () => game.nextLevel(mode),
+                  onNextLevel: () {
+                    game.bankAndAdvance(mode);
+                    game.nextLevel(mode);
+                  },
                 ),
+
+              FreeHintEarnedOverlay(mode: mode),
             ],
           ),
         ),
@@ -140,7 +152,7 @@ class GameScreen extends StatelessWidget {
 
   Widget _buildTopBar(
     BuildContext context, {
-    required dynamic state,
+    required GameState state,
     required bool isRu,
     required LanguageMode mode,
     required int foundCount,
@@ -218,11 +230,11 @@ class GameScreen extends StatelessWidget {
                 style: AppTheme.condensedLabel,
               ),
               Text(
-                '${state.score}',
+                '${state.pendingScore}',
                 style: AppTheme.condensedBold.copyWith(fontSize: 18),
               )
                   .animate(
-                    target: state.score > 0 ? 1 : 0,
+                    target: state.pendingScore > 0 ? 1 : 0,
                   )
                   .scale(
                     begin: const Offset(1.3, 1.3),
@@ -240,7 +252,7 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusRow(BuildContext context, dynamic state, bool isRu) {
+  Widget _buildStatusRow(BuildContext context, GameState state, bool isRu) {
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -248,18 +260,24 @@ class GameScreen extends StatelessWidget {
         children: [
           // Status message: last found word OR too-common notice
           if (state.lastFoundWord != null)
-            Expanded(
-              child: Text(
-                '✓ ${state.lastFoundWord!.toUpperCase()}  +${_pointsForWord(state.lastFoundWord!)}',
-                style: AppTheme.condensedBold.copyWith(
-                  color: AppTheme.primary,
-                  fontSize: 12,
-                ),
-              )
-                  .animate(onPlay: (c) => c.forward())
-                  .slideX(begin: -0.3, end: 0, duration: 200.ms)
-                  .fadeIn(duration: 200.ms),
-            )
+            Builder(builder: (_) {
+              final word = state.lastFoundWord!;
+              final isBonus = state.level.targetWords
+                  .any((tw) => tw.word == word && tw.isBonus);
+              final points = GameEngine.scoreWord(word, isBonus: isBonus);
+              return Expanded(
+                child: Text(
+                  '✓ ${word.toUpperCase()}  +$points',
+                  style: AppTheme.condensedBold.copyWith(
+                    color: AppTheme.primary,
+                    fontSize: 12,
+                  ),
+                )
+                    .animate(onPlay: (c) => c.forward())
+                    .slideX(begin: -0.3, end: 0, duration: 200.ms)
+                    .fadeIn(duration: 200.ms),
+              );
+            })
           else if (state.tooCommonWord != null)
             Expanded(
               child: Text(
@@ -277,35 +295,24 @@ class GameScreen extends StatelessWidget {
             const Expanded(child: SizedBox()),
 
           // Hint button
-          GestureDetector(
-            onTap: state.hintsRemaining > 0
-                ? () => context.read<GameProvider>().useHint()
-                : null,
-            child: Text(
-              '💡 ${isRu ? StringsRu.hintButton : StringsEn.hintButton} ×${state.hintsRemaining}',
-              style: AppTheme.condensedLabel.copyWith(
-                color: state.hintsRemaining > 0
-                    ? AppTheme.accent
-                    : AppTheme.mutedFg,
-                fontSize: 11,
+          Builder(builder: (ctx) {
+            final available = ctx.watch<GameProvider>().hintAvailable;
+            return GestureDetector(
+              onTap: available
+                  ? () => ctx.read<GameProvider>().useHint()
+                  : null,
+              child: Text(
+                '💡 ${isRu ? StringsRu.hintButton : StringsEn.hintButton}',
+                style: AppTheme.condensedLabel.copyWith(
+                  color: available ? AppTheme.accent : AppTheme.mutedFg,
+                  fontSize: 11,
+                ),
               ),
-            ),
-          ),
+            );
+          }),
         ],
       ),
     );
-  }
-
-  int _pointsForWord(String word) {
-    final base = word.length * 10;
-    final bonus = word.length >= 6
-        ? 30
-        : word.length >= 5
-            ? 20
-            : word.length >= 4
-                ? 10
-                : 0;
-    return base + bonus;
   }
 
   Widget _languageToggle(BuildContext context, LanguageMode mode) {

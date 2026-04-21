@@ -86,27 +86,30 @@ class GameState {
   final List<String> selectedTileIds;
   final String currentInput;
   final List<String> foundWords;
-  final int score;
-  final int hintsRemaining;
+  final int pendingScore;
+  final Set<String> revealedTileIds;
+  final bool pendingRewardedAdPrompt;
   final bool isShaking;
   final bool isLevelComplete;
+  final bool isReplayMode;
+  final bool libraryComplete;
   final String? lastFoundWord;
   final String? tooCommonWord;
-
-  final Map<String, int> hintedLetterCounts;
 
   const GameState({
     required this.level,
     this.selectedTileIds = const [],
     this.currentInput = '',
     this.foundWords = const [],
-    this.score = 0,
-    this.hintsRemaining = 3,
+    this.pendingScore = 0,
+    this.revealedTileIds = const {},
+    this.pendingRewardedAdPrompt = false,
     this.isShaking = false,
     this.isLevelComplete = false,
+    this.isReplayMode = false,
+    this.libraryComplete = false,
     this.lastFoundWord,
     this.tooCommonWord,
-    this.hintedLetterCounts = const {},
   });
 
   GameState copyWith({
@@ -114,29 +117,34 @@ class GameState {
     List<String>? selectedTileIds,
     String? currentInput,
     List<String>? foundWords,
-    int? score,
-    int? hintsRemaining,
+    int? pendingScore,
+    Set<String>? revealedTileIds,
+    bool? pendingRewardedAdPrompt,
     bool? isShaking,
     bool? isLevelComplete,
+    bool? isReplayMode,
+    bool? libraryComplete,
     String? lastFoundWord,
     bool clearLastFoundWord = false,
     String? tooCommonWord,
     bool clearTooCommonWord = false,
-    Map<String, int>? hintedLetterCounts,
   }) =>
       GameState(
         level: level ?? this.level,
         selectedTileIds: selectedTileIds ?? this.selectedTileIds,
         currentInput: currentInput ?? this.currentInput,
         foundWords: foundWords ?? this.foundWords,
-        score: score ?? this.score,
-        hintsRemaining: hintsRemaining ?? this.hintsRemaining,
+        pendingScore: pendingScore ?? this.pendingScore,
+        revealedTileIds: revealedTileIds ?? this.revealedTileIds,
+        pendingRewardedAdPrompt:
+            pendingRewardedAdPrompt ?? this.pendingRewardedAdPrompt,
         isShaking: isShaking ?? this.isShaking,
         isLevelComplete: isLevelComplete ?? this.isLevelComplete,
+        isReplayMode: isReplayMode ?? this.isReplayMode,
+        libraryComplete: libraryComplete ?? this.libraryComplete,
         lastFoundWord:
             clearLastFoundWord ? null : (lastFoundWord ?? this.lastFoundWord),
         tooCommonWord:
             clearTooCommonWord ? null : (tooCommonWord ?? this.tooCommonWord),
-        hintedLetterCounts: hintedLetterCounts ?? this.hintedLetterCounts,
       );
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
+import 'package:slova_iz_slova/providers/rewards_provider.dart';
 import 'package:slova_iz_slova/providers/settings_provider.dart';
 import 'package:slova_iz_slova/screens/home_screen.dart';
 
@@ -13,11 +14,14 @@ void main() {
   });
 
   Widget wrap(SettingsProvider s) {
+    final rewards = RewardsProvider();
     return MaterialApp(
       home: MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: s),
-          ChangeNotifierProvider<GameProvider>(create: (_) => GameProvider()),
+          ChangeNotifierProvider<GameProvider>(
+            create: (_) => GameProvider(rewards: rewards),
+          ),
         ],
         child: const HomeScreen(),
       ),

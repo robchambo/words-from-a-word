@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -7,8 +8,16 @@ import '../models/game_state.dart';
 import '../models/language_mode.dart';
 import '../engine/game_engine.dart';
 import '../engine/level_loader.dart';
+import 'rewards_provider.dart';
 
 class GameProvider extends ChangeNotifier {
+  GameProvider({required RewardsProvider rewards, Random? rng})
+      : _rewards = rewards,
+        _rng = rng ?? Random();
+
+  final RewardsProvider _rewards;
+  final Random _rng;
+
   GameState? _state;
   GameState get state => _state!;
   bool get isReady => _state != null;
@@ -19,9 +28,27 @@ class GameProvider extends ChangeNotifier {
   Timer? _lastFoundTimer;
   Timer? _tooCommonTimer;
 
+  Map<String, Set<int>> get _revealedPositionsSnapshot => {
+        for (final tw in _state!.level.targetWords) tw.word: tw.revealedIndices,
+      };
+
+  bool get hintAvailable {
+    if (_state == null) return false;
+    // A hint is available only if a safe position exists in the level.
+    // Capacity (free slot / purchased / rewarded-ad fallback) is handled when
+    // consumed; the button is enabled whenever there's somewhere to hint.
+    return GameEngine.pickSafeHintLetter(
+          targetWords: _state!.level.targetWords,
+          revealedPositions: _revealedPositionsSnapshot,
+          rng: Random(0),
+        ) !=
+        null;
+  }
+
   Future<void> startGame(LanguageMode mode, {int levelNumber = 1}) async {
     _currentLevelIndex = levelNumber;
     final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
+    _rewards.maybeRefillDailyHint();
     _state = GameState(level: level);
     notifyListeners();
   }
@@ -143,7 +170,11 @@ class GameProvider extends ChangeNotifier {
 
     HapticFeedback.mediumImpact();
 
-    final points = GameEngine.scoreWord(word);
+    final foundTarget = s.level.targetWords.firstWhere((tw) => tw.word == word);
+    final points = GameEngine.scoreWord(word, isBonus: foundTarget.isBonus);
+    if (foundTarget.isBonus) {
+      _rewards.incrementBonusCounter();
+    }
     final newFoundWords = [...s.foundWords, word];
     final updatedTargetWords = s.level.targetWords
         .map((tw) => tw.word == word ? tw.copyWith(isFound: true) : tw)
@@ -167,7 +198,7 @@ class GameProvider extends ChangeNotifier {
       selectedTileIds: [],
       currentInput: '',
       foundWords: newFoundWords,
-      score: s.score + points,
+      pendingScore: s.pendingScore + points,
       isLevelComplete: levelDone,
       lastFoundWord: word,
     );
@@ -190,63 +221,100 @@ class GameProvider extends ChangeNotifier {
   }
 
   void useHint() {
-    final s = _state!;
-    if (s.hintsRemaining <= 0) return;
+    if (_state == null) return;
+    final safe = GameEngine.pickSafeHintLetter(
+      targetWords: _state!.level.targetWords,
+      revealedPositions: _revealedPositionsSnapshot,
+      rng: _rng,
+    );
+    if (safe == null) return;
 
-    final unfoundRequired = s.level.targetWords
-        .where((w) => !w.isFound && !w.isBonus)
-        .toList();
-    if (unfoundRequired.isEmpty) return;
-
-    // Count total occurrences of each letter that hasn't been hinted yet
-    final letterCounts = <String, int>{};
-    for (final tw in unfoundRequired) {
-      for (final ch in tw.word.split('')) {
-        if ((s.hintedLetterCounts[ch] ?? 0) == 0) {
-          letterCounts[ch] = (letterCounts[ch] ?? 0) + 1;
-        }
-      }
+    final source = _rewards.consumeHint();
+    if (source == null) {
+      // No free/purchased hint available — surface the rewarded-ad prompt.
+      _state = _state!.copyWith(pendingRewardedAdPrompt: true);
+      notifyListeners();
+      return;
     }
-    if (letterCounts.isEmpty) return;
 
-    // Pick letter with most occurrences across unfound required words
-    final hintLetter = letterCounts.entries
-        .reduce((a, b) => a.value >= b.value ? a : b)
-        .key;
+    _applyReveal(safe);
+  }
 
-    // Reveal ALL occurrences of hintLetter in each unfound required word
+  void _applyReveal(SafeHintResult safe) {
+    final s = _state!;
+    // Find the tile id whose letter+position matches the reveal.
+    // revealedIndices on TargetWord tracks word-local positions, but the UI
+    // highlights source tiles via GameState.revealedTileIds (set of tile ids).
+    // We update BOTH: the TargetWord indices (used by WordSlotItem underline)
+    // AND revealedTileIds (used by tile_picker's isHinted visual).
     final updatedTargetWords = s.level.targetWords.map((tw) {
-      if (tw.isFound || tw.isBonus) return tw;
-      final newIndices = <int>{...tw.revealedIndices};
-      for (int i = 0; i < tw.word.length; i++) {
-        if (tw.word[i] == hintLetter) newIndices.add(i);
-      }
-      if (newIndices.length == tw.revealedIndices.length) return tw;
+      if (tw.word != safe.wordKey) return tw;
+      final newIndices = {...tw.revealedIndices, safe.position};
       return tw.copyWith(revealedIndices: newIndices);
     }).toList();
 
-    final newHintedLetterCounts =
-        Map<String, int>.from(s.hintedLetterCounts)
-          ..[hintLetter] = 1;
+    // Add one matching tile id to revealedTileIds — prefer a tile whose letter
+    // matches and isn't already in the set. If we can't find one, leave the
+    // set unchanged (word-slot underline still fires).
+    final newRevealedTileIds = Set<String>.from(s.revealedTileIds);
+    for (final tile in s.level.sourceLetters) {
+      if (tile.letter == safe.letter && !newRevealedTileIds.contains(tile.id)) {
+        newRevealedTileIds.add(tile.id);
+        break;
+      }
+    }
 
     _state = s.copyWith(
-      hintsRemaining: s.hintsRemaining - 1,
-      hintedLetterCounts: newHintedLetterCounts,
       level: s.level.copyWith(targetWords: updatedTargetWords),
+      revealedTileIds: newRevealedTileIds,
     );
+    HapticFeedback.lightImpact();
     notifyListeners();
   }
 
+  /// Called by GameScreen after a rewarded ad completes (Phase 5 wires the ad).
+  void onRewardedAdCompleted() {
+    if (_state == null) return;
+    _state = _state!.copyWith(pendingRewardedAdPrompt: false);
+    final safe = GameEngine.pickSafeHintLetter(
+      targetWords: _state!.level.targetWords,
+      revealedPositions: _revealedPositionsSnapshot,
+      rng: _rng,
+    );
+    if (safe == null) {
+      notifyListeners();
+      return;
+    }
+    _rewards.addPurchasedHints(1);
+    _rewards.consumeHint(); // should now return HintSource.purchased
+    _applyReveal(safe);
+  }
+
+  void onRewardedAdDeclined() {
+    if (_state == null) return;
+    _state = _state!.copyWith(pendingRewardedAdPrompt: false);
+    notifyListeners();
+  }
+
+  /// Commits pendingScore + best score for the current level and advances
+  /// the level index. Requires `state.isLevelComplete` — abandons are handled
+  /// by the next `startGame` implicitly discarding pendingScore.
+  void bankAndAdvance(LanguageMode mode) {
+    if (_state == null || !_state!.isLevelComplete) return;
+    _rewards.onLevelComplete(
+      mode: mode,
+      levelId: _currentLevelIndex,
+      pendingScore: _state!.pendingScore,
+    );
+    // nextLevel is now called separately by the caller so LibraryCompleteScreen
+    // (Phase 3) can interpose.
+  }
+
   void nextLevel(LanguageMode mode) {
-    final savedScore = _state!.score;
-    final savedHints = _state!.hintsRemaining;
     _currentLevelIndex++;
     final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
-    _state = GameState(
-      level: level,
-      score: savedScore,
-      hintsRemaining: savedHints,
-    );
+    _state = GameState(level: level);
+    _rewards.maybeRefillDailyHint();
     notifyListeners();
   }
 

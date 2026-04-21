@@ -42,7 +42,7 @@ class TilePicker extends StatelessWidget {
               letter: tile.letter,
               isSelected: tile.isSelected,
               isUsed: tile.isUsed,
-              isHinted: state.hintedLetterCounts.containsKey(tile.letter),
+              isHinted: state.revealedTileIds.contains(tile.id),
               onTap: () {
                 if (tile.isSelected) {
                   game.deselectTile(tile.id);

@@ -45,6 +45,13 @@ class RewardsProvider extends ChangeNotifier {
     LanguageMode.english: 0,
   };
 
+  /// Tick incremented every time the bonus-word accumulator converts into a
+  /// new free hint. UI observes this with a `ValueListenableBuilder` or
+  /// `addListener` to fire the FreeHintEarnedOverlay. We use a ValueNotifier
+  /// instead of `notifyListeners()` so subscribers that only care about the
+  /// celebratory event don't rebuild on every save.
+  final ValueNotifier<int> freeHintEarnedTicks = ValueNotifier<int>(0);
+
   // --- Derived ----------------------------------------------------------
   int get _slotCap => premium ? _freeHintSlotCapPremium : _freeHintSlotCapFree;
   bool get canUseHint => freeHintSlot > 0 || purchasedHintCount > 0;
@@ -186,11 +193,18 @@ class RewardsProvider extends ChangeNotifier {
       if (freeHintSlot < _slotCap) {
         bonusWordCounter = 0;
         freeHintSlot += 1;
+        freeHintEarnedTicks.value = freeHintEarnedTicks.value + 1;
       }
       // else keep at 10, slot is full; caller owns popup UX
     }
     notifyListeners();
     save();
+  }
+
+  @override
+  void dispose() {
+    freeHintEarnedTicks.dispose();
+    super.dispose();
   }
 
   /// Set premium flag. Does not itself refill — call

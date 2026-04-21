@@ -30,6 +30,8 @@ class StringsEn {
   static const String selectLetters = 'Select letters';
   static const String bonusLabel = 'Bonus';
   static const String tooCommonWord = 'Word is too common!';
+  static const String bonusCounterLabel = 'Bonus words';
+  static const String bankedHintsLabel = 'Hints';
 
   static String difficultyLabel(LevelDifficulty d) {
     switch (d) {
@@ -57,11 +59,13 @@ class StringsEn {
   static const String rulesRules =
       'Rules: minimum 3 letters. Each letter can only be used as many times as it appears in the source word.';
   static const String rulesHint =
-      'Hint: tap the lightbulb to reveal the first letter of the next unsolved word. 3 hints per level.';
+      'Hints: tap the lightbulb to reveal one safe letter in an unsolved word — never the last one. Earn free hints by finding 10 bonus words, or watch a short ad.';
   static const String rulesScore =
-      'Scoring: 10 points per letter. Longer words earn a bonus!';
+      'Scoring: 10 points per letter, with length bonuses for 4+ letter words. Bonus words give a flat 15 points. Your score banks when the level is complete — abandon mid-level and it is lost.';
   static const String rulesComplete =
       'Level complete when all required words are found. Bonus words are a nice surprise!';
+  static const String freeHintEarnedTitle = 'Free hint earned!';
+  static const String freeHintEarnedBody = '10 bonus words — one hint is yours.';
   static const String rulesClose = 'Got it, let\'s play!';
 
   // Level complete
