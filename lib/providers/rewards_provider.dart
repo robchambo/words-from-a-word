@@ -12,7 +12,6 @@ import '../services/ad_gateway.dart'; // for HintSource
 class RewardsProvider extends ChangeNotifier {
   RewardsProvider({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
 
-  // ignore: unused_field
   final DateTime Function() _clock;
 
   static const int _currentSchemaVersion = 1;
@@ -49,7 +48,6 @@ class RewardsProvider extends ChangeNotifier {
   };
 
   // --- Derived ----------------------------------------------------------
-  // ignore: unused_element
   int get _slotCap => premium ? _freeHintSlotCapPremium : _freeHintSlotCapFree;
   bool get canUseHint => freeHintSlot > 0 || purchasedHintCount > 0;
 
@@ -121,6 +119,32 @@ class RewardsProvider extends ChangeNotifier {
       );
       await sp.setInt(_lifetimeKey(m), lifetimeScore[m] ?? 0);
     }
+  }
+
+  // --- Business logic ---------------------------------------------------
+  /// Grants a free hint if `lastDailyClaimedOn` is before today (local) AND
+  /// `freeHintSlot < cap`. Stamp the date either way so we don't recheck
+  /// repeatedly within the same day. Call on app resume and level start.
+  void maybeRefillDailyHint() {
+    final now = _clock();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final already = lastDailyClaimedOn;
+    if (already != null &&
+        already.year == today.year &&
+        already.month == today.month &&
+        already.day == today.day) {
+      return;
+    }
+
+    final cap = _slotCap;
+    if (freeHintSlot < cap) {
+      freeHintSlot += 1;
+    }
+    lastDailyClaimedOn = today;
+    notifyListeners();
+    // fire-and-forget persist
+    save();
   }
 
   // --- Parsers / writers ------------------------------------------------

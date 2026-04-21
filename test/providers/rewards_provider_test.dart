@@ -92,4 +92,77 @@ void main() {
       expect(provider.currentLevel[LanguageMode.russian], 1);
     });
   });
+
+  group('maybeRefillDailyHint', () {
+    test('fills slot when never claimed and cap not reached', () async {
+      final fakeNow = DateTime(2026, 4, 16, 9, 30);
+      final provider = RewardsProvider(clock: () => fakeNow);
+      await provider.load();
+
+      provider.maybeRefillDailyHint();
+
+      expect(provider.freeHintSlot, 1);
+      expect(provider.lastDailyClaimedOn, DateTime(2026, 4, 16));
+    });
+
+    test('does not double-fill on same day', () async {
+      SharedPreferences.setMockInitialValues({
+        'rewards.freeHintSlot': 1,
+        'rewards.lastDailyClaimedOn': '2026-04-16',
+      });
+      final fakeNow = DateTime(2026, 4, 16, 22, 0);
+      final provider = RewardsProvider(clock: () => fakeNow);
+      await provider.load();
+
+      provider.maybeRefillDailyHint();
+
+      expect(provider.freeHintSlot, 1);
+    });
+
+    test('fills on next day', () async {
+      SharedPreferences.setMockInitialValues({
+        'rewards.freeHintSlot': 0,
+        'rewards.lastDailyClaimedOn': '2026-04-15',
+      });
+      final fakeNow = DateTime(2026, 4, 16, 0, 5);
+      final provider = RewardsProvider(clock: () => fakeNow);
+      await provider.load();
+
+      provider.maybeRefillDailyHint();
+
+      expect(provider.freeHintSlot, 1);
+      expect(provider.lastDailyClaimedOn, DateTime(2026, 4, 16));
+    });
+
+    test('respects free cap of 1', () async {
+      SharedPreferences.setMockInitialValues({
+        'rewards.freeHintSlot': 1,
+        'rewards.lastDailyClaimedOn': '2026-04-15',
+      });
+      final fakeNow = DateTime(2026, 4, 16);
+      final provider = RewardsProvider(clock: () => fakeNow);
+      await provider.load();
+
+      provider.maybeRefillDailyHint();
+
+      expect(provider.freeHintSlot, 1, reason: 'cap=1 for non-premium');
+      expect(provider.lastDailyClaimedOn, DateTime(2026, 4, 16),
+          reason: 'date is still stamped to prevent re-check within the day');
+    });
+
+    test('premium cap is 3', () async {
+      SharedPreferences.setMockInitialValues({
+        'rewards.freeHintSlot': 2,
+        'rewards.premium': true,
+        'rewards.lastDailyClaimedOn': '2026-04-15',
+      });
+      final fakeNow = DateTime(2026, 4, 16);
+      final provider = RewardsProvider(clock: () => fakeNow);
+      await provider.load();
+
+      provider.maybeRefillDailyHint();
+
+      expect(provider.freeHintSlot, 3);
+    });
+  });
 }
