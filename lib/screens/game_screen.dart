@@ -126,7 +126,7 @@ class GameScreen extends StatelessWidget {
               // Level complete overlay
               if (state.isLevelComplete)
                 LevelCompleteOverlay(
-                  score: state.score,
+                  score: state.pendingScore,
                   wordsFound: state.foundWords.length,
                   languageMode: mode,
                   onNextLevel: () => game.nextLevel(mode),
@@ -218,11 +218,11 @@ class GameScreen extends StatelessWidget {
                 style: AppTheme.condensedLabel,
               ),
               Text(
-                '${state.score}',
+                '${state.pendingScore}',
                 style: AppTheme.condensedBold.copyWith(fontSize: 18),
               )
                   .animate(
-                    target: state.score > 0 ? 1 : 0,
+                    target: state.pendingScore > 0 ? 1 : 0,
                   )
                   .scale(
                     begin: const Offset(1.3, 1.3),
@@ -278,15 +278,11 @@ class GameScreen extends StatelessWidget {
 
           // Hint button
           GestureDetector(
-            onTap: state.hintsRemaining > 0
-                ? () => context.read<GameProvider>().useHint()
-                : null,
+            onTap: () => context.read<GameProvider>().useHint(),
             child: Text(
-              '💡 ${isRu ? StringsRu.hintButton : StringsEn.hintButton} ×${state.hintsRemaining}',
+              '💡 ${isRu ? StringsRu.hintButton : StringsEn.hintButton}',
               style: AppTheme.condensedLabel.copyWith(
-                color: state.hintsRemaining > 0
-                    ? AppTheme.accent
-                    : AppTheme.mutedFg,
+                color: AppTheme.accent,
                 fontSize: 11,
               ),
             ),
