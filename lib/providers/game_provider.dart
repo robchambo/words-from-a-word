@@ -45,11 +45,15 @@ class GameProvider extends ChangeNotifier {
         null;
   }
 
-  Future<void> startGame(LanguageMode mode, {int levelNumber = 1}) async {
+  Future<void> startGame(
+    LanguageMode mode, {
+    int levelNumber = 1,
+    bool isReplay = false,
+  }) async {
     _currentLevelIndex = levelNumber;
     final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
     _rewards.maybeRefillDailyHint();
-    _state = GameState(level: level);
+    _state = GameState(level: level, isReplayMode: isReplay);
     notifyListeners();
   }
 
@@ -312,9 +316,16 @@ class GameProvider extends ChangeNotifier {
 
   void nextLevel(LanguageMode mode) {
     _currentLevelIndex++;
-    final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
-    _state = GameState(level: level);
-    _rewards.maybeRefillDailyHint();
+    try {
+      final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
+      _state = GameState(level: level);
+      _rewards.maybeRefillDailyHint();
+    } on LevelNotFoundException {
+      // No more levels in the library — revert the index increment and signal
+      // library completion so the UI can route to the library-complete screen.
+      _currentLevelIndex--;
+      _state = _state!.copyWith(libraryComplete: true);
+    }
     notifyListeners();
   }
 
