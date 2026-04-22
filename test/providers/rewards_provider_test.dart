@@ -14,7 +14,7 @@ void main() {
       final provider = RewardsProvider();
       await provider.load();
 
-      expect(provider.schemaVersion, 1);
+      expect(provider.schemaVersion, 2);
       expect(provider.freeHintSlot, 0);
       expect(provider.bonusWordCounter, 0);
       expect(provider.lastDailyClaimedOn, isNull);
@@ -88,7 +88,7 @@ void main() {
       final provider = RewardsProvider();
       await provider.load();
 
-      expect(provider.schemaVersion, 1);
+      expect(provider.schemaVersion, 2);
       expect(provider.freeHintSlot, 0);
       expect(provider.currentLevel[LanguageMode.russian], 1);
     });

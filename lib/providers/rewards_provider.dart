@@ -20,7 +20,7 @@ class RewardsProvider extends ChangeNotifier {
     _achievements = e;
   }
 
-  static const int _currentSchemaVersion = 1;
+  static const int _currentSchemaVersion = 2;
   static const int _freeHintSlotCapFree = 1;
   static const int _freeHintSlotCapPremium = 3;
   static const int _bonusRefillThreshold = 10;
@@ -51,6 +51,10 @@ class RewardsProvider extends ChangeNotifier {
     LanguageMode.russian: 0,
     LanguageMode.english: 0,
   };
+  Map<LanguageMode, Map<int, Set<String>>> bankedBonusWords = {
+    LanguageMode.russian: <int, Set<String>>{},
+    LanguageMode.english: <int, Set<String>>{},
+  };
 
   /// Tick incremented every time the bonus-word accumulator converts into a
   /// new free hint. UI observes this with a `ValueListenableBuilder` or
@@ -78,13 +82,21 @@ class RewardsProvider extends ChangeNotifier {
   String _highestKey(LanguageMode m) => 'rewards.highestCompletedLevel.${_modeKey(m)}';
   String _bestScoreKey(LanguageMode m) => 'rewards.levelBestScore.${_modeKey(m)}';
   String _lifetimeKey(LanguageMode m) => 'rewards.lifetimeScore.${_modeKey(m)}';
+  String _bankedBonusKey(LanguageMode m) =>
+      'rewards.bankedBonusWords.${_modeKey(m)}';
   String _modeKey(LanguageMode m) => m == LanguageMode.russian ? 'ru' : 'en';
 
   // --- Load / Save ------------------------------------------------------
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
 
-    schemaVersion = sp.getInt(_kSchemaVersion) ?? _currentSchemaVersion;
+    final loadedVersion = sp.getInt(_kSchemaVersion) ?? _currentSchemaVersion;
+    // v1 → v2: bankedBonusWords did not exist. Default to empty maps (done by
+    // field initialiser). Bump the stored version so we don't migrate again.
+    if (loadedVersion < _currentSchemaVersion) {
+      await sp.setInt(_kSchemaVersion, _currentSchemaVersion);
+    }
+    schemaVersion = _currentSchemaVersion;
     freeHintSlot = sp.getInt(_kFreeHintSlot) ?? 0;
     bonusWordCounter = sp.getInt(_kBonusCounter) ?? 0;
     lastDailyClaimedOn = _parseDate(sp.getString(_kLastDailyClaimedOn));
@@ -99,6 +111,10 @@ class RewardsProvider extends ChangeNotifier {
       highestCompletedLevel[m] = sp.getInt(_highestKey(m)) ?? 0;
       levelBestScore[m] = _parseScoreMap(sp.getString(_bestScoreKey(m)));
       lifetimeScore[m] = sp.getInt(_lifetimeKey(m)) ?? 0;
+    }
+
+    for (final m in LanguageMode.values) {
+      bankedBonusWords[m] = _parseBankedBonus(sp.getString(_bankedBonusKey(m)));
     }
 
     notifyListeners();
@@ -130,6 +146,13 @@ class RewardsProvider extends ChangeNotifier {
         ),
       );
       await sp.setInt(_lifetimeKey(m), lifetimeScore[m] ?? 0);
+    }
+
+    for (final m in LanguageMode.values) {
+      final encoded = bankedBonusWords[m]!.map(
+        (levelId, words) => MapEntry(levelId.toString(), words.toList()),
+      );
+      await sp.setString(_bankedBonusKey(m), jsonEncode(encoded));
     }
   }
 
@@ -207,6 +230,39 @@ class RewardsProvider extends ChangeNotifier {
     }
     notifyListeners();
     save();
+  }
+
+  /// Adds `words` to the banked set for `(mode, levelId)`, returning the number
+  /// of words that were newly banked (i.e. not already present). Callers use
+  /// the return value to decide how many times to increment the hint counter.
+  int bankBonusWords({
+    required LanguageMode mode,
+    required int levelId,
+    required Iterable<String> words,
+  }) {
+    final map = bankedBonusWords[mode]!;
+    final existing = map.putIfAbsent(levelId, () => <String>{});
+    int newlyBanked = 0;
+    for (final w in words) {
+      if (existing.add(w.toLowerCase())) newlyBanked++;
+    }
+    notifyListeners();
+    save();
+    return newlyBanked;
+  }
+
+  /// Returns the level id where `word` was first banked, or null if it has not
+  /// been banked in `mode`. Used by submit-flow attribution and UI.
+  int? bankedBonusLevel({
+    required LanguageMode mode,
+    required String word,
+  }) {
+    final map = bankedBonusWords[mode]!;
+    final w = word.toLowerCase();
+    for (final entry in map.entries) {
+      if (entry.value.contains(w)) return entry.key;
+    }
+    return null;
   }
 
   @override
@@ -324,6 +380,19 @@ class RewardsProvider extends ChangeNotifier {
       return raw.map((k, v) => MapEntry(int.parse(k), (v as num).toInt()));
     } catch (_) {
       return <int, int>{};
+    }
+  }
+
+  Map<int, Set<String>> _parseBankedBonus(String? s) {
+    if (s == null || s.isEmpty) return <int, Set<String>>{};
+    try {
+      final raw = jsonDecode(s) as Map<String, dynamic>;
+      return raw.map((k, v) => MapEntry(
+            int.parse(k),
+            (v as List<dynamic>).map((e) => e.toString()).toSet(),
+          ));
+    } catch (_) {
+      return <int, Set<String>>{};
     }
   }
 }
