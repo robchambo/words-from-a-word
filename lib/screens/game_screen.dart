@@ -316,6 +316,21 @@ class GameScreen extends StatelessWidget {
                     .fadeIn(duration: 200.ms),
               );
             })
+          else if (state.alreadyUsedWord != null)
+            Expanded(
+              child: Text(
+                isRu
+                    ? StringsRu.alreadyUsedBonus(state.alreadyUsedInLevel ?? 0)
+                    : StringsEn.alreadyUsedBonus(state.alreadyUsedInLevel ?? 0),
+                style: AppTheme.condensedLabel.copyWith(
+                  color: AppTheme.mutedFg,
+                  fontSize: 12,
+                ),
+              )
+                  .animate(onPlay: (c) => c.forward())
+                  .slideX(begin: -0.3, end: 0, duration: 200.ms)
+                  .fadeIn(duration: 200.ms),
+            )
           else if (state.tooCommonWord != null)
             Expanded(
               child: Text(
