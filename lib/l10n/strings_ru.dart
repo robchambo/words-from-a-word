@@ -113,4 +113,12 @@ class StringsRu {
 
   static String alreadyUsedBonus(int levelNumber) =>
       'Уже найдено на уровне $levelNumber';
+
+  // Rewarded ad prompt
+  static const String rewardedAdPromptTitle =
+      'Посмотреть рекламу ради подсказки?';
+  static const String rewardedAdPromptBody =
+      'Короткое видео в обмен на одну подсказку.';
+  static const String rewardedAdPromptWatch = 'Смотреть';
+  static const String rewardedAdPromptNo = 'Нет, спасибо';
 }

@@ -109,4 +109,11 @@ class StringsEn {
 
   static String alreadyUsedBonus(int levelNumber) =>
       'Already found in Level $levelNumber';
+
+  // Rewarded ad prompt
+  static const String rewardedAdPromptTitle = 'Watch an ad for a hint?';
+  static const String rewardedAdPromptBody =
+      'A short video in exchange for one hint.';
+  static const String rewardedAdPromptWatch = 'Watch';
+  static const String rewardedAdPromptNo = 'No thanks';
 }

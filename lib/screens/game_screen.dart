@@ -10,9 +10,11 @@ import '../l10n/strings_en.dart';
 import '../providers/game_provider.dart';
 import '../providers/rewards_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/ad_gateway.dart';
 import '../theme/app_theme.dart';
 import '../widgets/grid_paper_background.dart';
 import '../widgets/progress_strip.dart';
+import '../widgets/rewarded_ad_prompt.dart';
 import '../widgets/stamp_badge.dart';
 import '../widgets/tile_picker.dart';
 import '../widgets/word_slots.dart';
@@ -20,8 +22,43 @@ import '../widgets/free_hint_earned_overlay.dart';
 import '../widgets/level_complete_overlay.dart';
 import 'library_complete_screen.dart';
 
-class GameScreen extends StatelessWidget {
+class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> {
+  bool _isShowingRewardedPrompt = false;
+
+  Future<void> _handleRewardedAdPrompt() async {
+    if (_isShowingRewardedPrompt) return;
+    _isShowingRewardedPrompt = true;
+    try {
+      final game = context.read<GameProvider>();
+      final watch = await showRewardedAdPrompt(context);
+      if (!mounted) return;
+      if (watch) {
+        bool granted = false;
+        await context
+            .read<AdGateway>()
+            .showRewarded(onReward: () {
+          granted = true;
+        });
+        if (!mounted) return;
+        if (granted) {
+          game.onRewardedAdCompleted();
+        } else {
+          game.onRewardedAdDeclined();
+        }
+      } else {
+        game.onRewardedAdDeclined();
+      }
+    } finally {
+      _isShowingRewardedPrompt = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +75,13 @@ class GameScreen extends StatelessWidget {
     }
 
     final state = game.state;
+
+    if (state.pendingRewardedAdPrompt && !_isShowingRewardedPrompt) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _handleRewardedAdPrompt();
+      });
+    }
 
     if (state.libraryComplete) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
