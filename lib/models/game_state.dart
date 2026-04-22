@@ -79,7 +79,14 @@ class GameLevel {
       );
 }
 
-enum WordValidationResult { found, alreadyFound, bonus, tooCommon, invalid }
+enum WordValidationResult {
+  found,
+  alreadyFound,
+  bonus,
+  tooCommon,
+  alreadyUsedElsewhere,
+  invalid,
+}
 
 class GameState {
   final GameLevel level;
@@ -95,6 +102,8 @@ class GameState {
   final bool libraryComplete;
   final String? lastFoundWord;
   final String? tooCommonWord;
+  final String? alreadyUsedWord;
+  final int? alreadyUsedInLevel;
 
   const GameState({
     required this.level,
@@ -110,6 +119,8 @@ class GameState {
     this.libraryComplete = false,
     this.lastFoundWord,
     this.tooCommonWord,
+    this.alreadyUsedWord,
+    this.alreadyUsedInLevel,
   });
 
   GameState copyWith({
@@ -128,6 +139,9 @@ class GameState {
     bool clearLastFoundWord = false,
     String? tooCommonWord,
     bool clearTooCommonWord = false,
+    String? alreadyUsedWord,
+    int? alreadyUsedInLevel,
+    bool clearAlreadyUsedWord = false,
   }) =>
       GameState(
         level: level ?? this.level,
@@ -146,5 +160,11 @@ class GameState {
             clearLastFoundWord ? null : (lastFoundWord ?? this.lastFoundWord),
         tooCommonWord:
             clearTooCommonWord ? null : (tooCommonWord ?? this.tooCommonWord),
+        alreadyUsedWord: clearAlreadyUsedWord
+            ? null
+            : (alreadyUsedWord ?? this.alreadyUsedWord),
+        alreadyUsedInLevel: clearAlreadyUsedWord
+            ? null
+            : (alreadyUsedInLevel ?? this.alreadyUsedInLevel),
       );
 }

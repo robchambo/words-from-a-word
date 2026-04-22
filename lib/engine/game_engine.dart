@@ -28,6 +28,7 @@ class GameEngine {
     required List<TargetWord> targetWords,
     required List<String> foundWords,
     required List<String> tooCommon,
+    Set<String> bankedBonusesInLanguage = const {},
   }) {
     final w = word.toLowerCase();
     if (foundWords.contains(w)) return WordValidationResult.alreadyFound;
@@ -40,6 +41,11 @@ class GameEngine {
         );
 
     if (target == null) return WordValidationResult.invalid;
+    // Uniqueness rule applies ONLY to bonus words. Required words can re-appear
+    // across levels and score normally each time.
+    if (target.isBonus && bankedBonusesInLanguage.contains(w)) {
+      return WordValidationResult.alreadyUsedElsewhere;
+    }
     if (target.isBonus) return WordValidationResult.bonus;
     return WordValidationResult.found;
   }

@@ -60,7 +60,7 @@ void main() {
     expect(game.state.pendingScore, 0);
   });
 
-  test('finding a bonus word increments rewards.bonusWordCounter', () async {
+  test('finding a bonus is provisional until bankAndAdvance', () async {
     final rewards = RewardsProvider();
     await rewards.load();
     expect(rewards.bonusWordCounter, 0);
@@ -77,6 +77,21 @@ void main() {
       return;
     }
     await _submitWord(game, bonus.first);
+    // Counter should NOT tick yet — bonus is provisional until bankAndAdvance.
+    expect(rewards.bonusWordCounter, 0);
+
+    // Find all required words to complete the level.
+    final required = game.state.level.targetWords
+        .where((tw) => !tw.isBonus)
+        .map((tw) => tw.word)
+        .toList();
+    for (final w in required) {
+      await _submitWord(game, w);
+    }
+    expect(game.state.isLevelComplete, isTrue);
+
+    game.bankAndAdvance(LanguageMode.english);
+    // Now the counter should tick once for the one bonus found.
     expect(rewards.bonusWordCounter, 1);
   });
 }

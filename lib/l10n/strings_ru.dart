@@ -110,4 +110,7 @@ class StringsRu {
 
   static const String replayModeBanner = 'Режим повтора — очки не засчитываются';
   static const String newBestTag = 'НОВЫЙ РЕКОРД';
+
+  static String alreadyUsedBonus(int levelNumber) =>
+      'Уже найдено на уровне $levelNumber';
 }

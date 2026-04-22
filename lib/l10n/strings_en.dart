@@ -106,4 +106,7 @@ class StringsEn {
 
   static const String replayModeBanner = 'Replay mode — scores not recorded';
   static const String newBestTag = 'NEW BEST';
+
+  static String alreadyUsedBonus(int levelNumber) =>
+      'Already found in Level $levelNumber';
 }
