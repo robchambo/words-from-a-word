@@ -15,6 +15,9 @@ dependencies:
   # State management
   provider: ^6.1.2
 
+  # Audio
+  audioplayers: ^6.0.0
+
   # Animations
   flutter_animate: ^4.5.0
 
@@ -40,6 +43,7 @@ flutter:
   assets:
     - assets/data/russian_levels.json
     - assets/data/english_levels.json
+    - assets/audio/
 
 flutter_launcher_icons:
   android: true
