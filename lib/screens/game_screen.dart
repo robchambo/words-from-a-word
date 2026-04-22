@@ -8,6 +8,7 @@ import '../models/language_mode.dart';
 import '../l10n/strings_ru.dart';
 import '../l10n/strings_en.dart';
 import '../providers/game_provider.dart';
+import '../providers/rewards_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/grid_paper_background.dart';
@@ -26,6 +27,7 @@ class GameScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final game = context.watch<GameProvider>();
     final settings = context.watch<SettingsProvider>();
+    final rewards = context.watch<RewardsProvider>();
     final mode = settings.languageMode ?? LanguageMode.russian;
     final isRu = mode == LanguageMode.russian;
 
@@ -160,15 +162,23 @@ class GameScreen extends StatelessWidget {
 
               // Level complete overlay
               if (state.isLevelComplete)
-                LevelCompleteOverlay(
-                  score: state.pendingScore,
-                  wordsFound: state.foundWords.length,
-                  languageMode: mode,
-                  onNextLevel: () {
-                    game.bankAndAdvance(mode);
-                    game.nextLevel(mode);
-                  },
-                ),
+                Builder(builder: (ctx) {
+                  final previousBest =
+                      rewards.levelBestScore[mode]?[state.level.levelNumber];
+                  final isNewBest =
+                      state.pendingScore > (previousBest ?? 0);
+                  return LevelCompleteOverlay(
+                    score: state.pendingScore,
+                    wordsFound: state.foundWords.length,
+                    languageMode: mode,
+                    previousBest: previousBest,
+                    isNewBest: isNewBest,
+                    onNextLevel: () {
+                      game.bankAndAdvance(mode);
+                      game.nextLevel(mode);
+                    },
+                  );
+                }),
 
               FreeHintEarnedOverlay(mode: mode),
             ],
