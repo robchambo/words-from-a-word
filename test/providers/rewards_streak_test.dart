@@ -62,4 +62,16 @@ void main() {
         mode: LanguageMode.english, levelId: 1, pendingScore: 100, isReplay: true);
     expect(p.streakCount, 1);
   });
+
+  test('replay does not update lifetime or best', () async {
+    SharedPreferences.setMockInitialValues({});
+    final p = RewardsProvider();
+    await p.load();
+    p.onLevelComplete(mode: LanguageMode.english, levelId: 1, pendingScore: 100, isReplay: false);
+    final lifeAfterFirst = p.lifetimeScore[LanguageMode.english];
+    final bestAfterFirst = p.levelBestScore[LanguageMode.english]?[1];
+    p.onLevelComplete(mode: LanguageMode.english, levelId: 1, pendingScore: 200, isReplay: true);
+    expect(p.lifetimeScore[LanguageMode.english], lifeAfterFirst);
+    expect(p.levelBestScore[LanguageMode.english]?[1], bestAfterFirst);
+  });
 }
