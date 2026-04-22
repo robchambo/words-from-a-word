@@ -63,7 +63,34 @@ class GameProvider extends ChangeNotifier {
     _currentLevelIndex = levelNumber;
     final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
     _rewards.maybeRefillDailyHint();
-    _state = GameState(level: level, isReplayMode: isReplay);
+
+    final isReplayOfCompleted = isReplay &&
+        (_rewards.highestCompletedLevel[mode] ?? 0) >= levelNumber;
+
+    List<TargetWord> initialTargets = level.targetWords;
+    List<String> initialFound = const [];
+    if (isReplayOfCompleted) {
+      // All REQUIRED words count as found. Any bonuses already banked for this
+      // level also count as found (uniqueness blocks re-submission).
+      final bankedHere =
+          _rewards.bankedBonusWords[mode]?[levelNumber] ?? <String>{};
+      initialTargets = level.targetWords.map((tw) {
+        final shouldPreFill = !tw.isBonus || bankedHere.contains(tw.word);
+        return shouldPreFill ? tw.copyWith(isFound: true) : tw;
+      }).toList();
+      initialFound = initialTargets
+          .where((tw) => tw.isFound)
+          .map((tw) => tw.word)
+          .toList();
+    }
+
+    _state = GameState(
+      level: level.copyWith(targetWords: initialTargets),
+      isReplayMode: isReplay,
+      foundWords: initialFound,
+      isLevelComplete:
+          isReplayOfCompleted ? GameEngine.isLevelComplete(initialTargets) : false,
+    );
     notifyListeners();
   }
 
@@ -236,6 +263,23 @@ class GameProvider extends ChangeNotifier {
       isBonus: foundTarget.isBonus,
       isReplay: s.isReplayMode,
     );
+
+    // Replay-of-completed: bank bonuses immediately because bankAndAdvance will
+    // be a no-op for replays. pendingScore is still updated for UI consistency,
+    // but lifetime score is credited live.
+    final isReplayOfCompleted = s.isReplayMode &&
+        (_rewards.highestCompletedLevel[_mode!] ?? 0) >= _currentLevelIndex;
+    if (isReplayOfCompleted && foundTarget.isBonus) {
+      final newlyBanked = _rewards.bankBonusWords(
+        mode: _mode!,
+        levelId: _currentLevelIndex,
+        words: [word],
+      );
+      if (newlyBanked > 0) {
+        _rewards.incrementBonusCounter();
+        _rewards.addLifetimeScore(mode: _mode!, points: points);
+      }
+    }
 
     _state = s.copyWith(
       level: newLevel,

@@ -232,6 +232,18 @@ class RewardsProvider extends ChangeNotifier {
     save();
   }
 
+  /// Credits `points` directly to `lifetimeScore[mode]`. Called by GameProvider
+  /// when a bonus word is found during a replay-of-completed level (where the
+  /// normal `onLevelComplete` path is skipped).
+  void addLifetimeScore({
+    required LanguageMode mode,
+    required int points,
+  }) {
+    lifetimeScore[mode] = (lifetimeScore[mode] ?? 0) + points;
+    notifyListeners();
+    save();
+  }
+
   /// Adds `words` to the banked set for `(mode, levelId)`, returning the number
   /// of words that were newly banked (i.e. not already present). Callers use
   /// the return value to decide how many times to increment the hint counter.
