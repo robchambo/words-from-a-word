@@ -106,23 +106,33 @@ class MobileAdsGateway implements AdGateway {
       unawaited(loadRewarded());
       return false;
     }
+    // Clear our reference immediately so a second tap during playback can't
+    // try to re-show this instance. The ad is single-use; pre-warm the next
+    // one on dismissal.
+    _rewarded = null;
+
+    bool earned = false;
+    final completer = Completer<bool>();
+
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
-        _rewarded = null;
         unawaited(loadRewarded());
+        if (!completer.isCompleted) completer.complete(earned);
       },
       onAdFailedToShowFullScreenContent: (ad, err) {
+        debugPrint('[MobileAdsGateway] rewarded show failed: $err');
         ad.dispose();
-        _rewarded = null;
         unawaited(loadRewarded());
+        if (!completer.isCompleted) completer.complete(false);
       },
     );
     await ad.show(
       onUserEarnedReward: (AdWithoutView ad, RewardItem reward) {
+        earned = true;
         onReward();
       },
     );
-    return true;
+    return completer.future;
   }
 }
