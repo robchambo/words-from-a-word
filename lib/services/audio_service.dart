@@ -8,20 +8,22 @@ import 'package:flutter/foundation.dart';
 /// app degrades gracefully when assets are missing or invalid (pre-launch
 /// the clips are zero-byte placeholders).
 class AudioService {
-  AudioService._()
-      : _players = _makePlayers(),
-        _cache = AudioCache(prefix: 'assets/');
+  AudioService._() : _cache = AudioCache(prefix: 'assets/');
 
   @visibleForTesting
   AudioService.forTesting({
     required List<AudioPlayer> players,
     required AudioCache cache,
-  })  : _players = players,
-        _cache = cache;
+  })  : _cache = cache {
+    _players.addAll(players);
+  }
 
   static final AudioService instance = AudioService._();
 
-  final List<AudioPlayer> _players;
+  /// Player pool — populated lazily in [initialize] so constructing the
+  /// singleton has no side effects. Under `flutter test`, [initialize] is not
+  /// called; the pool stays empty and all play*() calls become no-ops.
+  final List<AudioPlayer> _players = <AudioPlayer>[];
   final AudioCache _cache;
   int _next = 0;
   bool _muted = false;
@@ -38,13 +40,15 @@ class AudioService {
     'audio/bonus_refill.mp3',
   ];
 
-  static List<AudioPlayer> _makePlayers() {
-    final a = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
-    final b = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
-    return [a, b];
-  }
-
   Future<void> initialize() async {
+    if (_players.isEmpty) {
+      try {
+        _players.add(AudioPlayer()..setReleaseMode(ReleaseMode.stop));
+        _players.add(AudioPlayer()..setReleaseMode(ReleaseMode.stop));
+      } catch (e, s) {
+        debugPrint('AudioService: player pool unavailable: $e\n$s');
+      }
+    }
     for (final clip in _clips) {
       try {
         await _cache.load(clip);
@@ -68,6 +72,7 @@ class AudioService {
 
   Future<void> _play(String clip) async {
     if (_muted) return;
+    if (_players.isEmpty) return;
     final player = _players[_next];
     _next = (_next + 1) % _players.length;
     try {

@@ -9,6 +9,7 @@ import '../models/language_mode.dart';
 import '../engine/game_engine.dart';
 import '../engine/level_loader.dart';
 import '../services/achievement_engine.dart';
+import '../services/audio_service.dart';
 import 'rewards_provider.dart';
 
 class GameProvider extends ChangeNotifier {
@@ -100,6 +101,7 @@ class GameProvider extends ChangeNotifier {
     if (tile.isUsed || tile.isSelected) return;
 
     HapticFeedback.selectionClick();
+    audioService.playTap();
 
     final newSelected = [...s.selectedTileIds, tileId];
     final newInput = newSelected
@@ -177,6 +179,7 @@ class GameProvider extends ChangeNotifier {
     if (result == WordValidationResult.invalid ||
         result == WordValidationResult.alreadyFound) {
       HapticFeedback.heavyImpact();
+      audioService.playError();
       _state = s.copyWith(isShaking: true);
       notifyListeners();
 
@@ -236,6 +239,7 @@ class GameProvider extends ChangeNotifier {
     }
 
     HapticFeedback.mediumImpact();
+    audioService.playSuccess();
 
     final foundTarget = s.level.targetWords.firstWhere((tw) => tw.word == word);
     final points = GameEngine.scoreWord(word, isBonus: foundTarget.isBonus);
@@ -256,6 +260,11 @@ class GameProvider extends ChangeNotifier {
     );
 
     final levelDone = GameEngine.isLevelComplete(updatedTargetWords);
+
+    if (levelDone) {
+      HapticFeedback.heavyImpact();
+      audioService.playLevelComplete();
+    }
 
     _achievements?.onWordFound(
       mode: _mode ?? LanguageMode.russian,
@@ -357,6 +366,7 @@ class GameProvider extends ChangeNotifier {
       revealedTileIds: newRevealedTileIds,
     );
     HapticFeedback.lightImpact();
+    audioService.playHintReveal();
     notifyListeners();
   }
 
