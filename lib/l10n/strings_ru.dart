@@ -85,4 +85,29 @@ class StringsRu {
   static const String settingsRemoveAds = 'Убрать рекламу';
   static const String settingsRestore = 'Восстановить покупки';
   static const String settingsPrivacy = 'Политика конфиденциальности';
+
+  // Progression
+  static const String homePlay = 'Играть';
+  static const String homeLevels = 'Уровни';
+  static const String homeTrophies = 'Награды';
+  static const String homeSettings = 'Настройки';
+  static const String lifetimeScoreLabel = 'Всего очков';
+  static const String streakDaysLabel = 'Дней подряд';
+
+  static const String levelPickerTitle = 'Уровни';
+  static const String levelPickerLocked = 'Закрыто';
+  static const String levelPickerBestScore = 'Рекорд';
+
+  static const String trophiesTitle = 'Награды';
+  static const String trophiesLocked = 'Закрыто';
+  static const String trophiesUnlocked = 'Открыто';
+
+  static const String libraryCompleteTitle = 'Все уровни пройдены!';
+  static const String libraryCompleteBody =
+      'Вы прошли все уровни. Новые уже в пути. Можно переиграть любой уровень для удовольствия — в повторе очки не идут.';
+  static const String libraryCompleteReplay = 'Переиграть уровни';
+  static const String libraryCompleteClose = 'Закрыть';
+
+  static const String replayModeBanner = 'Режим повтора — очки не засчитываются';
+  static const String newBestTag = 'НОВЫЙ РЕКОРД';
 }

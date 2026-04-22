@@ -269,6 +269,7 @@ void main() {
         mode: LanguageMode.russian,
         levelId: 3,
         pendingScore: 150,
+        isReplay: false,
       );
 
       expect(p.highestCompletedLevel[LanguageMode.russian], 3);
@@ -283,11 +284,13 @@ void main() {
         mode: LanguageMode.english,
         levelId: 1,
         pendingScore: 80,
+        isReplay: false,
       );
       p.onLevelComplete(
         mode: LanguageMode.english,
         levelId: 1,
         pendingScore: 120,
+        isReplay: false,
       );
 
       expect(p.levelBestScore[LanguageMode.english]![1], 120);
@@ -302,11 +305,13 @@ void main() {
         mode: LanguageMode.russian,
         levelId: 1,
         pendingScore: 150,
+        isReplay: false,
       );
       p.onLevelComplete(
         mode: LanguageMode.russian,
         levelId: 1,
         pendingScore: 80,
+        isReplay: false,
       );
 
       expect(p.levelBestScore[LanguageMode.russian]![1], 150);

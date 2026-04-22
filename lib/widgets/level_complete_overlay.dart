@@ -13,6 +13,8 @@ class LevelCompleteOverlay extends StatelessWidget {
   final int wordsFound;
   final LanguageMode languageMode;
   final VoidCallback onNextLevel;
+  final int? previousBest;
+  final bool isNewBest;
 
   const LevelCompleteOverlay({
     super.key,
@@ -20,6 +22,8 @@ class LevelCompleteOverlay extends StatelessWidget {
     required this.wordsFound,
     required this.languageMode,
     required this.onNextLevel,
+    this.previousBest,
+    this.isNewBest = false,
   });
 
   bool get _isRu => languageMode == LanguageMode.russian;
@@ -73,6 +77,36 @@ class LevelCompleteOverlay extends StatelessWidget {
                   color: AppTheme.accent,
                 ),
               ),
+              if (isNewBest) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _isRu ? StringsRu.newBestTag : StringsEn.newBestTag,
+                    style: AppTheme.condensedBold.copyWith(
+                      color: AppTheme.background,
+                      fontSize: 11,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ] else if (previousBest != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '${_isRu ? StringsRu.levelPickerBestScore : StringsEn.levelPickerBestScore}: $previousBest',
+                  style: AppTheme.condensedLabel.copyWith(
+                    fontSize: 11,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: onNextLevel,

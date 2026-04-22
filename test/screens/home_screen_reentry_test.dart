@@ -19,6 +19,7 @@ void main() {
       home: MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: s),
+          ChangeNotifierProvider<RewardsProvider>.value(value: rewards),
           ChangeNotifierProvider<GameProvider>(
             create: (_) => GameProvider(rewards: rewards),
           ),

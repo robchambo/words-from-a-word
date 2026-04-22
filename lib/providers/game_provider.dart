@@ -8,6 +8,7 @@ import '../models/game_state.dart';
 import '../models/language_mode.dart';
 import '../engine/game_engine.dart';
 import '../engine/level_loader.dart';
+import '../services/achievement_engine.dart';
 import 'rewards_provider.dart';
 
 class GameProvider extends ChangeNotifier {
@@ -18,11 +19,18 @@ class GameProvider extends ChangeNotifier {
   final RewardsProvider _rewards;
   final Random _rng;
 
+  AchievementEngine? _achievements;
+
+  void attachAchievementEngine(AchievementEngine e) {
+    _achievements = e;
+  }
+
   GameState? _state;
   GameState get state => _state!;
   bool get isReady => _state != null;
 
   int _currentLevelIndex = 1; // Global 1-based position in the level array.
+  LanguageMode? _mode; // Tracks the current language mode for achievement events.
 
   Timer? _shakeTimer;
   Timer? _lastFoundTimer;
@@ -45,11 +53,16 @@ class GameProvider extends ChangeNotifier {
         null;
   }
 
-  Future<void> startGame(LanguageMode mode, {int levelNumber = 1}) async {
+  Future<void> startGame(
+    LanguageMode mode, {
+    int levelNumber = 1,
+    bool isReplay = false,
+  }) async {
+    _mode = mode;
     _currentLevelIndex = levelNumber;
     final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
     _rewards.maybeRefillDailyHint();
-    _state = GameState(level: level);
+    _state = GameState(level: level, isReplayMode: isReplay);
     notifyListeners();
   }
 
@@ -193,6 +206,13 @@ class GameProvider extends ChangeNotifier {
 
     final levelDone = GameEngine.isLevelComplete(updatedTargetWords);
 
+    _achievements?.onWordFound(
+      mode: _mode ?? LanguageMode.russian,
+      wordLength: word.length,
+      isBonus: foundTarget.isBonus,
+      isReplay: s.isReplayMode,
+    );
+
     _state = s.copyWith(
       level: newLevel,
       selectedTileIds: [],
@@ -301,20 +321,45 @@ class GameProvider extends ChangeNotifier {
   /// by the next `startGame` implicitly discarding pendingScore.
   void bankAndAdvance(LanguageMode mode) {
     if (_state == null || !_state!.isLevelComplete) return;
+
+    final usedHint = _state!.revealedTileIds.isNotEmpty ||
+        _state!.level.targetWords.any((tw) => tw.revealedIndices.isNotEmpty);
+    final bonusWords =
+        _state!.level.targetWords.where((tw) => tw.isBonus).toList();
+    final foundAllBonus =
+        bonusWords.isNotEmpty && bonusWords.every((tw) => tw.isFound);
+
+    _achievements?.onLevelComplete(
+      mode: mode,
+      levelId: _currentLevelIndex,
+      usedHint: usedHint,
+      foundAllBonus: foundAllBonus,
+      isReplay: _state!.isReplayMode,
+    );
+
     _rewards.onLevelComplete(
       mode: mode,
       levelId: _currentLevelIndex,
       pendingScore: _state!.pendingScore,
+      isReplay: _state!.isReplayMode,
     );
     // nextLevel is now called separately by the caller so LibraryCompleteScreen
     // (Phase 3) can interpose.
   }
 
   void nextLevel(LanguageMode mode) {
+    _mode = mode;
     _currentLevelIndex++;
-    final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
-    _state = GameState(level: level);
-    _rewards.maybeRefillDailyHint();
+    try {
+      final level = LevelLoader.generateLevel(_currentLevelIndex, mode);
+      _state = GameState(level: level);
+      _rewards.maybeRefillDailyHint();
+    } on LevelNotFoundException {
+      // No more levels in the library — revert the index increment and signal
+      // library completion so the UI can route to the library-complete screen.
+      _currentLevelIndex--;
+      _state = _state!.copyWith(libraryComplete: true);
+    }
     notifyListeners();
   }
 

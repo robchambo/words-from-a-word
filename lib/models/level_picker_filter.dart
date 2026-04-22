@@ -1,0 +1,1 @@
+enum LevelPickerFilter { all, completedOnly }

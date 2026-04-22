@@ -8,6 +8,7 @@ import '../models/language_mode.dart';
 import '../l10n/strings_ru.dart';
 import '../l10n/strings_en.dart';
 import '../providers/game_provider.dart';
+import '../providers/rewards_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/grid_paper_background.dart';
@@ -17,6 +18,7 @@ import '../widgets/tile_picker.dart';
 import '../widgets/word_slots.dart';
 import '../widgets/free_hint_earned_overlay.dart';
 import '../widgets/level_complete_overlay.dart';
+import 'library_complete_screen.dart';
 
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
@@ -25,6 +27,7 @@ class GameScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final game = context.watch<GameProvider>();
     final settings = context.watch<SettingsProvider>();
+    final rewards = context.watch<RewardsProvider>();
     final mode = settings.languageMode ?? LanguageMode.russian;
     final isRu = mode == LanguageMode.russian;
 
@@ -35,6 +38,18 @@ class GameScreen extends StatelessWidget {
     }
 
     final state = game.state;
+
+    if (state.libraryComplete) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => LibraryCompleteScreen(mode: mode),
+          ),
+        );
+      });
+      return const Scaffold(body: SizedBox.shrink());
+    }
     final foundCount =
         state.level.targetWords.where((w) => w.isFound && !w.isBonus).length;
     final totalCount = state.level.totalWords;
@@ -57,6 +72,21 @@ class GameScreen extends StatelessWidget {
                     totalCount: totalCount,
                     progress: progress,
                   ),
+
+                  // Replay mode banner
+                  if (state.isReplayMode)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      color: AppTheme.accent.withValues(alpha: 0.25),
+                      alignment: Alignment.center,
+                      child: Text(
+                        isRu
+                            ? StringsRu.replayModeBanner
+                            : StringsEn.replayModeBanner,
+                        style: AppTheme.condensedBold,
+                      ),
+                    ),
 
                   // Progress strip (bonus counter + banked hints)
                   ProgressStrip(mode: mode),
@@ -132,15 +162,23 @@ class GameScreen extends StatelessWidget {
 
               // Level complete overlay
               if (state.isLevelComplete)
-                LevelCompleteOverlay(
-                  score: state.pendingScore,
-                  wordsFound: state.foundWords.length,
-                  languageMode: mode,
-                  onNextLevel: () {
-                    game.bankAndAdvance(mode);
-                    game.nextLevel(mode);
-                  },
-                ),
+                Builder(builder: (ctx) {
+                  final previousBest =
+                      rewards.levelBestScore[mode]?[state.level.levelNumber];
+                  final isNewBest =
+                      state.pendingScore > (previousBest ?? 0);
+                  return LevelCompleteOverlay(
+                    score: state.pendingScore,
+                    wordsFound: state.foundWords.length,
+                    languageMode: mode,
+                    previousBest: previousBest,
+                    isNewBest: isNewBest,
+                    onNextLevel: () {
+                      game.bankAndAdvance(mode);
+                      game.nextLevel(mode);
+                    },
+                  );
+                }),
 
               FreeHintEarnedOverlay(mode: mode),
             ],

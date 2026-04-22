@@ -6,6 +6,7 @@ import 'engine/level_loader.dart';
 import 'providers/settings_provider.dart';
 import 'providers/game_provider.dart';
 import 'providers/rewards_provider.dart';
+import 'services/achievement_engine.dart';
 import 'services/ad_gateway.dart';
 import 'services/audio_service.dart';
 import 'app.dart';
@@ -26,10 +27,16 @@ void main() async {
   final rewards = RewardsProvider();
   await rewards.load();
 
+  final achievements = AchievementEngine(rewards);
+  rewards.attachAchievementEngine(achievements);
+
   final AdGateway adGateway = NoopAdGateway();
   await adGateway.initialize();
 
   await AudioService.instance.initialize();
+
+  final gameProvider = GameProvider(rewards: rewards);
+  gameProvider.attachAchievementEngine(achievements);
 
   runApp(
     MultiProvider(
@@ -37,9 +44,7 @@ void main() async {
         ChangeNotifierProvider<SettingsProvider>.value(value: settings),
         ChangeNotifierProvider<RewardsProvider>.value(value: rewards),
         Provider<AdGateway>.value(value: adGateway),
-        ChangeNotifierProvider<GameProvider>(
-          create: (_) => GameProvider(rewards: rewards),
-        ),
+        ChangeNotifierProvider<GameProvider>.value(value: gameProvider),
       ],
       child: const SlovaApp(),
     ),
