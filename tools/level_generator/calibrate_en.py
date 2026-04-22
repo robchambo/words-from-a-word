@@ -302,11 +302,18 @@ def compute_targets(all_required, all_eligible, manual):
     return {p: geo_mean(pools[p]) for p in PROFILE_ORDER}
 
 
-def suggest_profile(eligible, all_required_for_src, targets):
+def suggest_profile(eligible, all_required_for_src, candidates, targets):
     """
-    Among eligible profiles, returns the one whose required-word median is
-    closest (log-scale) to the computed target for that profile.
-    Falls back to the first eligible profile if no targets are set.
+    Primary: median of required words, matched to per-profile targets derived
+    from seeded anchor words (log-scale distance). This is the feel signal —
+    it measures where the required words actually sit in frequency space.
+
+    Secondary (tiebreaker): gap_ratio — prefer the profile where the frequency
+    cutoff is cleanest. This breaks ties without overriding the feel signal.
+
+    Falls back to the first eligible profile when no targets are seeded yet.
+    The suggestion is unreliable until SOURCE_WORDS has enough anchor words to
+    populate targets for each profile.
     """
     set_p = [p for p in eligible if targets.get(p) is not None]
     if not set_p:
@@ -316,7 +323,11 @@ def suggest_profile(eligible, all_required_for_src, targets):
         med = median_of(all_required_for_src[p])
         return abs(math.log(max(med, 1)) - math.log(max(targets[p], 1)))
 
-    return min(set_p, key=lambda p: (log_dist(p), PROFILE_ORDER.index(p)))
+    def gap(p):
+        gr = get_gap_ratio(candidates, p)
+        return gr if gr is not None else 0.0
+
+    return min(set_p, key=lambda p: (log_dist(p), -gap(p)))
 
 
 def pshort(profile):

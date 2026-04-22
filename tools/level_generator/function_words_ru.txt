@@ -11,3 +11,6 @@
 # (PREP, NPRO, CONJ, PRCL, INTJ, PRED). Add to this file only when you
 # observe a function word appearing in required or bonus during generation
 # review and confirm pymorphy3 is tagging it incorrectly.
+
+# Demonstrative pronouns mislabelled by pymorphy3
+тот

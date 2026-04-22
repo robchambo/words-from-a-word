@@ -114,6 +114,7 @@ Key decisions made during the initial build. Read alongside `CLAUDE.md` and `doc
 - **Prepositions** (`PREP` POS) — removed because short prepositions feel like unearned answers; longer ones (перед, вокруг) may be added manually as bonus words where thematically fitting
 - **Profanity** — removed via a manually maintained blocklist at `tools/level_generator/blocklist.txt`
 - **Lemmatization** — only root forms included (nominative singular for nouns, infinitive for verbs, short form for adjectives) to avoid clutter from inflected duplicates; interesting conjugations may be added back manually
+- **bonus_only demotion** — words in `bonus_only_ru.txt` / `bonus_only_en.txt` are classified normally first, then any that would land in `required` are moved to `bonus` in a post-pass. This covers words that pass all quality gates and are valid vocabulary but are too obscure or inappropriate for a required slot (e.g. ecclesiastical titles, drug vocabulary). The demotion is recorded in `overrides.excluded.required` and `overrides.included.bonus` in the level JSON so reviewers can see what deviated from the profile.
 
 **Impact:** `ru_freq.txt` has a comment header stating it is raw. The Flutter runtime never touches the dictionary — it reads only pre-computed `required` and `bonus` arrays from the level JSON. `tools/level_generator/generate.py` is the authoritative source for all word classification logic.
 
@@ -281,12 +282,14 @@ P6–P10 required words are longer everyday words: говорить, норма�
 
 - **Length:** 5–15 letters (nouns)
 - **POS:** nouns only
+- **No diminutives:** excluded manually — pymorphy3 carries no Dimin tag, so the filter cannot be automated. Review `find_seeds.py` output before adding to `SOURCE_WORDS`.
 - **Minimum recognisability frequency:** ~100 (words below this are likely unknown to players)
 - **Required word count target:** 5–15 at the assigned profile (the eligibility band)
 - **Gap ratio preference (soft):** prefer source words where `freq(last required) / freq(first excluded)` ≥ 2.0 (decent) or ≥ 4.0 (clean) at the assigned profile. This means the frequency cut between required and bonus falls in a natural gap rather than splitting a cluster of similar-frequency words. Clean gaps are ~3–13% of eligible words depending on profile and language — this is a tiebreaker, not a filter. The calibrator displays gap ratio for each eligible profile.
 
 **Future expansion avenues (not yet implemented):**
 - **Longer source words (16–25 letters):** viable for P8–P10. Russian has richer long-word vocabulary (up to 21 letters in quality-gated vocab: самосовершенствование, достопримечательность). English tops out around 16 (responsibility, extraterrestrial). Requires P6–P10 profiles to be active.
+- **Variable source word length by profile:** currently all profiles share the 5–15 letter range. A future tuning option is to allow longer source words at lower profiles (more letters → more 3–4 letter sub-words available for P1/P2) or shorter source words at higher profiles (a short but letter-diverse word that yields few but hard required words).
 - **Adjectives:** grammatically valid but letter distributions skew toward -ский/-ный/-ный (RU) or -tion/-ing (EN) endings, which may produce repetitive required sets. Worth testing.
 - **Diminutives (RU):** уменьшительно-ласкательные формы (котёнок, домик, речка) — skew shorter and simpler, potentially useful for an easier sub-profile or beginner mode.
 
@@ -298,7 +301,7 @@ P6–P10 required words are longer everyday words: говорить, норма�
 
 **Phase 1 — Global vocabulary build:** Runs the full frequency list through the generator quality gate (hunspell + lemma + POS + blocklist) without any formability constraint. Results cached to `vocab_cache_*.json`. Verifies that PROFILES `freq_threshold` values match their intended percentile cutoffs (✓ within 10%).
 
-**Phase 2 — Source word evaluation:** For each source word, finds eligible profiles (required count in [5, 15]), suggests an assignment by log-scale median distance to targets derived from anchor words, and shows the required word list per eligible profile in diff format (first profile shown in full; subsequent profiles show `+` additions and `−` removals vs. the previous eligible profile).
+**Phase 2 — Source word evaluation:** For each source word, finds eligible profiles (required count in [5, 15]), suggests an assignment by log-scale median distance to targets derived from anchor words, and shows the required word list per eligible profile in diff format (first profile shown in full; subsequent profiles show `+` additions and `−` removals vs. the previous eligible profile). Gap_ratio is the tiebreaker when two profiles are equidistant — not the primary signal, because gap_ratio measures cutoff sharpness, not the actual difficulty of the required words. A word could have a clean gap at P4 while its required words are all tier-1 common nouns; median catches this, gap_ratio does not.
 
 **Near-miss display:** Below each eligible profile's word list, the calibrator shows up to 5 formable words with freq in `[ft÷2, ft)` — words that just missed the required threshold. The `ft÷2` lower bound is one log-step below the threshold: on the Zipf distribution, halving and doubling are symmetric distances, so `ft÷2` captures the natural borderline zone without expanding into genuinely rare words. These are candidates for manual promotion to required via per-level overrides. This display also partially offsets the subtitle corpus bias: a word like блокнот or велосипед may have low subtitle frequency despite being universally known, and the near-miss list surfaces it for the level designer to consider rather than silently routing it to bonus.
 

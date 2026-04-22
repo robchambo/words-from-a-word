@@ -1,0 +1,10 @@
+# Global bonus-only list for the English level generator.
+# One lemma per line. Lines starting with # are ignored.
+#
+# Words here pass the quality gate and are valid English,
+# but should never appear in the required set — too obscure or inappropriate
+# for a family game. They remain discoverable as bonus words.
+# Mirrors bonus_only_ru.txt — see that file for full rationale.
+#
+# The demotion is recorded in overrides.excluded.required and
+# overrides.included.bonus in the level JSON output.

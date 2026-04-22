@@ -1,0 +1,24 @@
+# Global bonus-only list for the Russian level generator.
+# One lemma per line. Lines starting with # are ignored.
+#
+# Words here pass the hunspell quality gate and are valid Russian,
+# but should never appear in the required set — too obscure or inappropriate
+# for a family game. They remain discoverable as bonus words.
+#
+# The generator classifies each word normally first (required vs bonus),
+# then demotes any required-eligible word found here to bonus.
+# The demotion is recorded in overrides.excluded.required and
+# overrides.included.bonus in the level JSON output.
+#
+# See docs/DECISIONS.md for rationale.
+
+# Obscure — valid but too niche for a general-audience required set
+дон
+сан
+трико
+
+# Inappropriate — unsuitable for a family game
+кокаин
+кретин
+слабак
+рвота

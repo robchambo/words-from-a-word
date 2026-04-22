@@ -33,6 +33,9 @@
 росс
 тори
 
+# Proper nouns / character names that pass PROPER_NOUN_TAGS filter
+самоделкин
+
 # ============================================================
 # SECTION 2: PROFANITY
 # Russian mat roots whose lemma forms pass the hunspell dictionary.
@@ -44,4 +47,8 @@
 сукин
 курва
 шлюха
+стерва
+тварь
 пенис
+жопа
+киска

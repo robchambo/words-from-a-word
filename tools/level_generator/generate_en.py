@@ -117,6 +117,7 @@ REPO_ROOT = os.path.join(SCRIPT_DIR, '..', '..')
 FREQ_FILE = os.path.join(SCRIPT_DIR, 'en_freq.txt')
 BLOCKLIST_FILE = os.path.join(SCRIPT_DIR, 'blocklist_en.txt')
 FUNCTION_WORDS_FILE = os.path.join(SCRIPT_DIR, 'function_words_en.txt')
+BONUS_ONLY_FILE = os.path.join(SCRIPT_DIR, 'bonus_only_en.txt')
 OUTPUT_FILE = os.path.join(REPO_ROOT, 'assets', 'data', 'english_levels.json')
 
 # ---------------------------------------------------------------------------
@@ -160,6 +161,25 @@ def load_function_words(path):
             if line and not line.startswith('#'):
                 words.add(line.lower())
     return words
+
+
+def load_bonus_only(path):
+    """
+    Returns a set of lowercase word strings from bonus_only_en.txt.
+    Words in this set are always routed to bonus regardless of frequency —
+    they pass the quality gate but are inappropriate or too niche for required.
+    Lines starting with # are comments. Missing file returns empty set.
+    """
+    if not os.path.exists(path):
+        return set()
+    words = set()
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                words.add(line.lower())
+    return words
+
 
 def load_blocklist(path):
     """
@@ -246,6 +266,7 @@ FUNCTION_WORD_POS = {'ADP', 'PRON', 'CCONJ', 'SCONJ', 'DET', 'INTJ', 'PART'}
 # Explicit function words list — supplements FUNCTION_WORD_POS for edge
 # cases where spaCy assigns an unexpected tag on isolated words.
 FUNCTION_WORDS = load_function_words(FUNCTION_WORDS_FILE)
+BONUS_ONLY = load_bonus_only(BONUS_ONLY_FILE)
 
 def get_tag(word):
     """Returns the spaCy Universal Dependencies POS tag for a word."""
@@ -316,11 +337,19 @@ def generate_level(source_word, freq, overrides_excluded, blocklists,
         else:
             bonus.append(word)
 
+    # Post-pass: words in BONUS_ONLY that landed in required are demoted to bonus.
+    # Returned separately so make_level can record them in the overrides section.
+    bonus_overrides = [w for w in required if w in BONUS_ONLY]
+    if bonus_overrides:
+        required = [w for w in required if w not in BONUS_ONLY]
+        bonus.extend(bonus_overrides)
+
     required.sort(key=lambda w: (len(w), w))
     bonus.sort(key=lambda w: (len(w), w))
     too_common.sort(key=lambda w: (len(w), w))
     blocked.sort(key=lambda w: (len(w), w))
-    return required, bonus, too_common, blocked
+    bonus_overrides.sort(key=lambda w: (len(w), w))
+    return required, bonus, too_common, blocked, bonus_overrides
 
 # ---------------------------------------------------------------------------
 # Helper to reduce per-level boilerplate. (Russian's per-level functions
@@ -331,7 +360,7 @@ def make_level(source_word, profile_name, freq, blocklists,
                overrides_excluded=None, overrides_included=None):
     overrides_excluded = overrides_excluded or []
     overrides_included = overrides_included or {}
-    required, bonus, too_common, blocked = generate_level(
+    required, bonus, too_common, blocked, bonus_overrides = generate_level(
         source_word, freq, overrides_excluded, blocklists,
         **PROFILES[profile_name])
 
@@ -352,11 +381,25 @@ def make_level(source_word, profile_name, freq, blocklists,
         "tooCommon": too_common,
         "blocked": blocked,
     }
-    overrides = {}
+
+    exc_dict = {}
     if overrides_excluded:
-        overrides["excluded"] = overrides_excluded
-    if overrides_included:
-        overrides["included"] = overrides_included
+        exc_dict["all"] = overrides_excluded
+    if bonus_overrides:
+        exc_dict["required"] = bonus_overrides
+
+    inc_dict = dict(overrides_included)
+    if bonus_overrides:
+        inc_bonus = list(inc_dict.get('bonus', []))
+        inc_bonus.extend(w for w in bonus_overrides if w not in inc_bonus)
+        inc_bonus.sort(key=lambda w: (len(w), w))
+        inc_dict['bonus'] = inc_bonus
+
+    overrides = {}
+    if exc_dict:
+        overrides["excluded"] = exc_dict
+    if inc_dict:
+        overrides["included"] = inc_dict
     if overrides:
         entry["overrides"] = overrides
     return entry

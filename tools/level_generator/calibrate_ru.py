@@ -69,6 +69,8 @@ SOURCE_WORDS = [
     "телевизор", "приключение", "картошка", "направление",
     "литература", "комсомолец",
     "математика", "территория",
+    # Diminutives must be excluded manually — pymorphy3 has no Dimin tag.
+    # Review find_seeds.py output before adding here. See docs/DECISIONS.md D16.
 ]
 
 PROFILE_ORDER = ['P1_BEGINNER', 'P2_EASY', 'P3_MEDIUM', 'P4_HARD', 'P5_EXPERT']
@@ -308,11 +310,18 @@ def compute_targets(all_required, all_eligible, manual):
     return {p: geo_mean(pools[p]) for p in PROFILE_ORDER}
 
 
-def suggest_profile(eligible, all_required_for_src, targets):
+def suggest_profile(eligible, all_required_for_src, candidates, targets):
     """
-    Among eligible profiles, returns the one whose required-word median is
-    closest (log-scale) to the computed target for that profile.
-    Falls back to the first eligible profile if no targets are set.
+    Primary: median of required words, matched to per-profile targets derived
+    from seeded anchor words (log-scale distance). This is the feel signal —
+    it measures where the required words actually sit in frequency space.
+
+    Secondary (tiebreaker): gap_ratio — prefer the profile where the frequency
+    cutoff is cleanest. This breaks ties without overriding the feel signal.
+
+    Falls back to the first eligible profile when no targets are seeded yet.
+    The suggestion is unreliable until SOURCE_WORDS has enough anchor words to
+    populate targets for each profile.
     """
     set_p = [p for p in eligible if targets.get(p) is not None]
     if not set_p:
@@ -322,7 +331,11 @@ def suggest_profile(eligible, all_required_for_src, targets):
         med = median_of(all_required_for_src[p])
         return abs(math.log(max(med, 1)) - math.log(max(targets[p], 1)))
 
-    return min(set_p, key=lambda p: (log_dist(p), PROFILE_ORDER.index(p)))
+    def gap(p):
+        gr = get_gap_ratio(candidates, p)
+        return gr if gr is not None else 0.0
+
+    return min(set_p, key=lambda p: (log_dist(p), -gap(p)))
 
 
 def pshort(profile):
@@ -380,10 +393,11 @@ def print_source_word_detail(vocab, manual):
         print(f"{'═' * 64}")
 
         for src in section_words:
-            req      = all_required[src]
-            eligible = all_eligible[src]
-            man      = manual.get(src)
-            sug      = suggest_profile(eligible, req, targets) if eligible else None
+            req        = all_required[src]
+            eligible   = all_eligible[src]
+            man        = manual.get(src)
+            candidates = build_candidates_from_vocab(src, vocab)
+            sug        = suggest_profile(eligible, req, candidates, targets) if eligible else None
 
             el_str = ' '.join(pshort(p) for p in eligible) if eligible else 'none'
             if man:
@@ -397,7 +411,6 @@ def print_source_word_detail(vocab, manual):
 
             prev_set   = None
             prev_order = []
-            candidates = build_candidates_from_vocab(src, vocab)
             for p in eligible:
                 words    = req[p]
                 curr_set = set(w for w, _ in words)
@@ -458,7 +471,8 @@ def print_source_word_detail(vocab, manual):
     if pending:
         print(f"\n  Pending manual assignments:")
         for s in pending:
-            sug = suggest_profile(all_eligible[s], all_required[s], targets)
+            cands = build_candidates_from_vocab(s, vocab)
+            sug = suggest_profile(all_eligible[s], all_required[s], cands, targets)
             print(f"    {s:<16}  suggested: {pshort(sug)}")
     print()
 
