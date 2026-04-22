@@ -17,6 +17,7 @@ import '../widgets/tile_picker.dart';
 import '../widgets/word_slots.dart';
 import '../widgets/free_hint_earned_overlay.dart';
 import '../widgets/level_complete_overlay.dart';
+import 'library_complete_screen.dart';
 
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
@@ -35,6 +36,18 @@ class GameScreen extends StatelessWidget {
     }
 
     final state = game.state;
+
+    if (state.libraryComplete) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => LibraryCompleteScreen(mode: mode),
+          ),
+        );
+      });
+      return const Scaffold(body: SizedBox.shrink());
+    }
     final foundCount =
         state.level.targetWords.where((w) => w.isFound && !w.isBonus).length;
     final totalCount = state.level.totalWords;
