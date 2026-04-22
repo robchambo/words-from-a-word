@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/language_mode.dart';
 import '../services/ad_gateway.dart';
+import '../services/achievement_engine.dart';
 
 /// Owns all persisted v1.1 player state except language. See
 /// `docs/V1_1_CONTRACTS.md` for authoritative field list and persistence keys.
@@ -12,6 +13,12 @@ class RewardsProvider extends ChangeNotifier {
   RewardsProvider({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
 
   final DateTime Function() _clock;
+
+  AchievementEngine? _achievements;
+
+  void attachAchievementEngine(AchievementEngine e) {
+    _achievements = e;
+  }
 
   static const int _currentSchemaVersion = 1;
   static const int _freeHintSlotCapFree = 1;
@@ -194,6 +201,7 @@ class RewardsProvider extends ChangeNotifier {
         bonusWordCounter = 0;
         freeHintSlot += 1;
         freeHintEarnedTicks.value = freeHintEarnedTicks.value + 1;
+        _achievements?.onFreeHintEarned();
       }
       // else keep at 10, slot is full; caller owns popup UX
     }
@@ -261,6 +269,7 @@ class RewardsProvider extends ChangeNotifier {
       }
     }
     streakLastPlayedOn = today;
+    _achievements?.onStreakIncrement(streakCount);
 
     notifyListeners();
     save();
