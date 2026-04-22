@@ -109,4 +109,33 @@ class StringsEn {
 
   static String alreadyUsedBonus(int levelNumber) =>
       'Already found in Level $levelNumber';
+
+  // Rewarded ad prompt
+  static const String rewardedAdPromptTitle = 'Watch an ad for a hint?';
+  static const String rewardedAdPromptBody =
+      'A short video in exchange for one hint.';
+  static const String rewardedAdPromptWatch = 'Watch';
+  static const String rewardedAdPromptNo = 'No thanks';
+
+  // Premium pitch
+  static const String premiumPitchTitle = 'Remove ads';
+  static const String premiumPitchBody =
+      'One-time purchase. No ads between levels, ever.';
+  static const String premiumPitchBuy = 'Buy';
+  static const String premiumPitchNotNow = 'Not now';
+
+  // Hint pack pitch
+  static const String hintPackPitchTitle = 'Hint pack';
+  static const String hintPackPitchBody = '5 hints for when you need a nudge.';
+  static const String hintPackPitchBuy = 'Buy';
+  static const String hintPackPitchCancel = 'Cancel';
+
+  // Consent explainers
+  static const String attConsentBody =
+      'We use tracking only to show relevant ads so the game stays free.';
+  static const String umpConsentBody =
+      'EU users: your consent controls whether ads are personalised.';
+
+  // Restore flow
+  static const String settingsRestoring = 'Restoring purchases...';
 }

@@ -27,8 +27,10 @@ dependencies:
   # Shared preferences (persist language choice, score, level)
   shared_preferences: ^2.3.2
 
-  # Ads (uncomment after core game is working)
-  # google_mobile_ads: ^5.1.0
+  # Monetisation (Phase 5)
+  google_mobile_ads: ^5.1.0
+  in_app_purchase: ^3.2.0
+  app_tracking_transparency: ^2.0.4
 
 dev_dependencies:
   flutter_test:

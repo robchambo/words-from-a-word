@@ -5,6 +5,7 @@ import 'package:slova_iz_slova/engine/level_loader.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 
 void main() {
   setUp(() async {
@@ -17,7 +18,7 @@ void main() {
       () async {
     final rewards = RewardsProvider();
     await rewards.load();
-    final game = GameProvider(rewards: rewards, rng: Random(1));
+    final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway(), rng: Random(1));
     await game.startGame(LanguageMode.english);
 
     // Submit every required word in the level.
@@ -32,7 +33,7 @@ void main() {
     final banked = game.state.pendingScore;
     expect(banked, greaterThan(0));
 
-    game.bankAndAdvance(LanguageMode.english);
+    await game.bankAndAdvance(LanguageMode.english);
 
     expect(rewards.lifetimeScore[LanguageMode.english], banked);
     expect(rewards.highestCompletedLevel[LanguageMode.english], 1);
@@ -41,7 +42,7 @@ void main() {
   test('starting a new level without banking discards pendingScore', () async {
     final rewards = RewardsProvider();
     await rewards.load();
-    final game = GameProvider(rewards: rewards, rng: Random(1));
+    final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway(), rng: Random(1));
     await game.startGame(LanguageMode.english);
 
     // Submit one word so pendingScore > 0.
@@ -64,7 +65,7 @@ void main() {
     final rewards = RewardsProvider();
     await rewards.load();
     expect(rewards.bonusWordCounter, 0);
-    final game = GameProvider(rewards: rewards, rng: Random(1));
+    final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway(), rng: Random(1));
     await game.startGame(LanguageMode.english);
 
     final bonus = game.state.level.targetWords
@@ -90,7 +91,7 @@ void main() {
     }
     expect(game.state.isLevelComplete, isTrue);
 
-    game.bankAndAdvance(LanguageMode.english);
+    await game.bankAndAdvance(LanguageMode.english);
     // Now the counter should tick once for the one bonus found.
     expect(rewards.bonusWordCounter, 1);
   });

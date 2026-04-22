@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:slova_iz_slova/providers/rewards_provider.dart';
 import 'package:slova_iz_slova/providers/settings_provider.dart';
 import 'package:slova_iz_slova/screens/settings_screen.dart';
 
@@ -10,10 +11,17 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  Widget wrap(Widget child, SettingsProvider settings) {
+  Widget wrap(
+    Widget child,
+    SettingsProvider settings,
+    RewardsProvider rewards,
+  ) {
     return MaterialApp(
-      home: ChangeNotifierProvider.value(
-        value: settings,
+      home: MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: settings),
+          ChangeNotifierProvider.value(value: rewards),
+        ],
         child: child,
       ),
     );
@@ -22,8 +30,10 @@ void main() {
   testWidgets('renders six stub rows', (tester) async {
     final settings = SettingsProvider();
     await settings.load();
+    final rewards = RewardsProvider();
+    await rewards.load();
 
-    await tester.pumpWidget(wrap(const SettingsScreen(), settings));
+    await tester.pumpWidget(wrap(const SettingsScreen(), settings, rewards));
 
     expect(find.text('Language'), findsOneWidget);
     expect(find.text('How to play'), findsOneWidget);
@@ -36,15 +46,17 @@ void main() {
   testWidgets('Phase-1-disabled rows are dimmed', (tester) async {
     final settings = SettingsProvider();
     await settings.load();
+    final rewards = RewardsProvider();
+    await rewards.load();
 
-    await tester.pumpWidget(wrap(const SettingsScreen(), settings));
+    await tester.pumpWidget(wrap(const SettingsScreen(), settings, rewards));
 
-    // Mute row is Phase 1-disabled (enabled in Phase 4). Remove-ads / Restore /
-    // Privacy also disabled here.
-    final muteRow = find.ancestor(
-      of: find.text('Mute sounds'),
+    // Privacy row is still disabled in Phase 5 (Remove ads / Restore are now
+    // enabled). Expect it to be wrapped in an Opacity.
+    final privacyRow = find.ancestor(
+      of: find.text('Privacy policy'),
       matching: find.byType(Opacity),
     );
-    expect(muteRow, findsOneWidget);
+    expect(privacyRow, findsOneWidget);
   });
 }

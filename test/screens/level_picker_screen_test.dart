@@ -7,6 +7,7 @@ import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/models/level_picker_filter.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 import 'package:slova_iz_slova/screens/level_picker_screen.dart';
 import 'package:slova_iz_slova/widgets/level_picker_tile.dart';
 
@@ -34,7 +35,7 @@ void main() {
         providers: [
           ChangeNotifierProvider<RewardsProvider>.value(value: rewards),
           ChangeNotifierProvider<GameProvider>(
-            create: (_) => GameProvider(rewards: rewards),
+            create: (_) => GameProvider(rewards: rewards, adGateway: NoopAdGateway()),
           ),
         ],
         child: const MaterialApp(

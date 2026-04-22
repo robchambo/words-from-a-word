@@ -4,6 +4,7 @@ import 'package:slova_iz_slova/engine/level_loader.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 
 void main() {
   setUp(() async {
@@ -20,7 +21,7 @@ void main() {
       // to simulate completing the last level and advancing past the end.
       final rewards = RewardsProvider();
       await rewards.load();
-      final game = GameProvider(rewards: rewards);
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway());
       await game.startGame(LanguageMode.english, levelNumber: 20);
 
       expect(game.state.libraryComplete, isFalse);
@@ -33,7 +34,7 @@ void main() {
     test('isReplayMode is stored from startGame parameter', () async {
       final rewards = RewardsProvider();
       await rewards.load();
-      final game = GameProvider(rewards: rewards);
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway());
 
       await game.startGame(LanguageMode.english, levelNumber: 1, isReplay: true);
       expect(game.state.isReplayMode, isTrue);
@@ -47,7 +48,7 @@ void main() {
         () async {
       final rewards = RewardsProvider();
       await rewards.load();
-      final game = GameProvider(rewards: rewards);
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway());
       await game.startGame(LanguageMode.english, levelNumber: 1);
 
       game.nextLevel(LanguageMode.english);

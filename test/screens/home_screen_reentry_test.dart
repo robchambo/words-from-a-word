@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 import 'package:slova_iz_slova/providers/settings_provider.dart';
 import 'package:slova_iz_slova/screens/home_screen.dart';
 
@@ -21,7 +22,7 @@ void main() {
           ChangeNotifierProvider.value(value: s),
           ChangeNotifierProvider<RewardsProvider>.value(value: rewards),
           ChangeNotifierProvider<GameProvider>(
-            create: (_) => GameProvider(rewards: rewards),
+            create: (_) => GameProvider(rewards: rewards, adGateway: NoopAdGateway()),
           ),
         ],
         child: const HomeScreen(),

@@ -9,6 +9,9 @@ import 'providers/rewards_provider.dart';
 import 'services/achievement_engine.dart';
 import 'services/ad_gateway.dart';
 import 'services/audio_service.dart';
+import 'services/consent_service.dart';
+import 'services/mobile_ads_gateway.dart';
+import 'services/purchases_service.dart';
 import 'app.dart';
 
 void main() async {
@@ -30,12 +33,20 @@ void main() async {
   final achievements = AchievementEngine(rewards);
   rewards.attachAchievementEngine(achievements);
 
-  final AdGateway adGateway = NoopAdGateway();
+  // Consent must run before ad init so AdMob can respect the user's choice.
+  // The UMP SDK handles personalised-vs-non-personalised signalling internally
+  // based on the status ConsentService records — we initialise the gateway
+  // either way so non-personalised ads still serve if consent is denied.
+  await ConsentService.instance.initialize();
+
+  final AdGateway adGateway = MobileAdsGateway();
   await adGateway.initialize();
+
+  await PurchasesService.instance.initialize(rewards);
 
   await AudioService.instance.initialize();
 
-  final gameProvider = GameProvider(rewards: rewards);
+  final gameProvider = GameProvider(rewards: rewards, adGateway: adGateway);
   gameProvider.attachAchievementEngine(achievements);
 
   runApp(

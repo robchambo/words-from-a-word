@@ -5,6 +5,7 @@ import 'package:slova_iz_slova/engine/level_loader.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 
 void main() {
   setUp(() async {
@@ -16,7 +17,7 @@ void main() {
   test('submitWord does NOT immediately bank a bonus', () async {
     final r = RewardsProvider();
     await r.load();
-    final g = GameProvider(rewards: r, rng: Random(1));
+    final g = GameProvider(rewards: r, adGateway: NoopAdGateway(), rng: Random(1));
     await g.startGame(LanguageMode.english, levelNumber: 1);
 
     final bonus = g.state.level.targetWords.where((tw) => tw.isBonus).toList();
@@ -29,7 +30,7 @@ void main() {
   test('bankAndAdvance banks all session bonuses + ticks hint counter', () async {
     final r = RewardsProvider();
     await r.load();
-    final g = GameProvider(rewards: r, rng: Random(1));
+    final g = GameProvider(rewards: r, adGateway: NoopAdGateway(), rng: Random(1));
     await g.startGame(LanguageMode.english, levelNumber: 1);
 
     // Find every required and every bonus.
@@ -41,7 +42,7 @@ void main() {
     final bonusCount =
         g.state.level.targetWords.where((tw) => tw.isBonus && tw.isFound).length;
 
-    g.bankAndAdvance(LanguageMode.english);
+    await g.bankAndAdvance(LanguageMode.english);
 
     if (bonusCount > 0) {
       expect(r.bankedBonusWords[LanguageMode.english]![1], isNotEmpty);
@@ -62,7 +63,7 @@ void main() {
   test('abandoning level (no bankAndAdvance) does NOT bank bonuses', () async {
     final r = RewardsProvider();
     await r.load();
-    final g = GameProvider(rewards: r, rng: Random(1));
+    final g = GameProvider(rewards: r, adGateway: NoopAdGateway(), rng: Random(1));
     await g.startGame(LanguageMode.english, levelNumber: 1);
 
     final bonus = g.state.level.targetWords.where((tw) => tw.isBonus).toList();
@@ -80,7 +81,7 @@ void main() {
       () async {
     final r = RewardsProvider();
     await r.load();
-    final g = GameProvider(rewards: r, rng: Random(1));
+    final g = GameProvider(rewards: r, adGateway: NoopAdGateway(), rng: Random(1));
     await g.startGame(LanguageMode.english, levelNumber: 1);
 
     final bonus = g.state.level.targetWords.where((tw) => tw.isBonus).toList();
