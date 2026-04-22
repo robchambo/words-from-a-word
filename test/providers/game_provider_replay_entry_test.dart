@@ -5,6 +5,7 @@ import 'package:slova_iz_slova/engine/level_loader.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 
 void main() {
   setUp(() async {
@@ -17,7 +18,7 @@ void main() {
     final r = RewardsProvider();
     await r.load();
     r.highestCompletedLevel[LanguageMode.english] = 1;
-    final g = GameProvider(rewards: r, rng: Random(1));
+    final g = GameProvider(rewards: r, adGateway: NoopAdGateway(), rng: Random(1));
     await g.startGame(LanguageMode.english, levelNumber: 1, isReplay: true);
 
     final required =
@@ -29,7 +30,7 @@ void main() {
     final r = RewardsProvider();
     await r.load();
     r.highestCompletedLevel[LanguageMode.english] = 1;
-    final g = GameProvider(rewards: r, rng: Random(1));
+    final g = GameProvider(rewards: r, adGateway: NoopAdGateway(), rng: Random(1));
     await g.startGame(LanguageMode.english, levelNumber: 1, isReplay: true);
 
     final bonus = g.state.level.targetWords
@@ -52,7 +53,7 @@ void main() {
     final r = RewardsProvider();
     await r.load();
     r.highestCompletedLevel[LanguageMode.english] = 1;
-    final g = GameProvider(rewards: r, rng: Random(1));
+    final g = GameProvider(rewards: r, adGateway: NoopAdGateway(), rng: Random(1));
 
     // Pre-bank a bonus at level 1.
     await g.startGame(LanguageMode.english, levelNumber: 1);
@@ -85,7 +86,7 @@ void main() {
     final r = RewardsProvider();
     await r.load();
     r.highestCompletedLevel[LanguageMode.english] = 0;
-    final g = GameProvider(rewards: r, rng: Random(1));
+    final g = GameProvider(rewards: r, adGateway: NoopAdGateway(), rng: Random(1));
     await g.startGame(LanguageMode.english, levelNumber: 1, isReplay: true);
 
     final required =

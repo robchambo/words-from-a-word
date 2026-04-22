@@ -6,6 +6,7 @@ import 'package:slova_iz_slova/engine/level_loader.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 import 'package:slova_iz_slova/providers/settings_provider.dart';
 import 'package:slova_iz_slova/screens/game_screen.dart';
 import 'package:slova_iz_slova/screens/library_complete_screen.dart';
@@ -31,7 +32,7 @@ void main() {
     final rewards = RewardsProvider();
     await rewards.load();
 
-    final game = GameProvider(rewards: rewards);
+    final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway());
     // Start at the last English level (20).
     await game.startGame(LanguageMode.english, levelNumber: 20);
 

@@ -9,15 +9,21 @@ import '../models/language_mode.dart';
 import '../engine/game_engine.dart';
 import '../engine/level_loader.dart';
 import '../services/achievement_engine.dart';
+import '../services/ad_gateway.dart';
 import '../services/audio_service.dart';
 import 'rewards_provider.dart';
 
 class GameProvider extends ChangeNotifier {
-  GameProvider({required RewardsProvider rewards, Random? rng})
-      : _rewards = rewards,
+  GameProvider({
+    required RewardsProvider rewards,
+    required AdGateway adGateway,
+    Random? rng,
+  })  : _rewards = rewards,
+        _adGateway = adGateway,
         _rng = rng ?? Random();
 
   final RewardsProvider _rewards;
+  final AdGateway _adGateway;
   final Random _rng;
 
   AchievementEngine? _achievements;
@@ -397,7 +403,7 @@ class GameProvider extends ChangeNotifier {
   /// Commits pendingScore + best score for the current level and advances
   /// the level index. Requires `state.isLevelComplete` — abandons are handled
   /// by the next `startGame` implicitly discarding pendingScore.
-  void bankAndAdvance(LanguageMode mode) {
+  Future<void> bankAndAdvance(LanguageMode mode) async {
     if (_state == null || !_state!.isLevelComplete) return;
 
     final usedHint = _state!.revealedTileIds.isNotEmpty ||
@@ -439,6 +445,10 @@ class GameProvider extends ChangeNotifier {
           _rewards.incrementBonusCounter();
         }
       }
+    }
+
+    if (!_rewards.premium) {
+      await _adGateway.showInterstitial();
     }
     // nextLevel is now called separately by the caller so LibraryCompleteScreen
     // (Phase 3) can interpose.

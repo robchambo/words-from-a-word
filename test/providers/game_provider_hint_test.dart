@@ -5,6 +5,7 @@ import 'package:slova_iz_slova/engine/level_loader.dart';
 import 'package:slova_iz_slova/models/language_mode.dart';
 import 'package:slova_iz_slova/providers/game_provider.dart';
 import 'package:slova_iz_slova/providers/rewards_provider.dart';
+import 'package:slova_iz_slova/services/ad_gateway.dart';
 
 void main() {
   setUp(() async {
@@ -17,7 +18,7 @@ void main() {
     test('hintAvailable is true at level start (many safe positions)', () async {
       final rewards = RewardsProvider();
       await rewards.load();
-      final game = GameProvider(rewards: rewards, rng: Random(1));
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway(), rng: Random(1));
       await game.startGame(LanguageMode.english);
       expect(game.hintAvailable, isTrue);
     });
@@ -26,7 +27,7 @@ void main() {
       SharedPreferences.setMockInitialValues({'rewards.freeHintSlot': 1});
       final rewards = RewardsProvider();
       await rewards.load();
-      final game = GameProvider(rewards: rewards, rng: Random(1));
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway(), rng: Random(1));
       await game.startGame(LanguageMode.english);
 
       final beforeSlot = rewards.freeHintSlot;
@@ -55,7 +56,7 @@ void main() {
       final rewards = RewardsProvider();
       await rewards.load();
       // freeHintSlot = 0, purchasedHintCount = 0 → consumeHint returns null.
-      final game = GameProvider(rewards: rewards, rng: Random(1));
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway(), rng: Random(1));
       await game.startGame(LanguageMode.english);
 
       game.useHint();
@@ -76,7 +77,7 @@ void main() {
       });
       final rewards = RewardsProvider();
       await rewards.load();
-      final game = GameProvider(rewards: rewards, rng: Random(1));
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway(), rng: Random(1));
       await game.startGame(LanguageMode.english);
       game.useHint(); // sets flag
       expect(game.state.pendingRewardedAdPrompt, isTrue);
@@ -98,7 +99,7 @@ void main() {
       });
       final rewards = RewardsProvider();
       await rewards.load();
-      final game = GameProvider(rewards: rewards, rng: Random(1));
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway(), rng: Random(1));
       await game.startGame(LanguageMode.english);
       game.useHint();
       expect(game.state.pendingRewardedAdPrompt, isTrue);
@@ -116,7 +117,7 @@ void main() {
       final rewards = RewardsProvider();
       await rewards.load();
       expect(rewards.freeHintSlot, 0);
-      final game = GameProvider(rewards: rewards);
+      final game = GameProvider(rewards: rewards, adGateway: NoopAdGateway());
       await game.startGame(LanguageMode.english);
       expect(rewards.freeHintSlot, 1);
     });

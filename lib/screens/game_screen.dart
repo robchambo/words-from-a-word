@@ -173,8 +173,8 @@ class GameScreen extends StatelessWidget {
                     languageMode: mode,
                     previousBest: previousBest,
                     isNewBest: isNewBest,
-                    onNextLevel: () {
-                      game.bankAndAdvance(mode);
+                    onNextLevel: () async {
+                      await game.bankAndAdvance(mode);
                       game.nextLevel(mode);
                     },
                   );

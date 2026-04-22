@@ -46,7 +46,7 @@ void main() async {
 
   await AudioService.instance.initialize();
 
-  final gameProvider = GameProvider(rewards: rewards);
+  final gameProvider = GameProvider(rewards: rewards, adGateway: adGateway);
   gameProvider.attachAchievementEngine(achievements);
 
   runApp(
