@@ -93,6 +93,10 @@ class GameEngine {
     final candidates = <SafeHintResult>[];
     for (final tw in targetWords) {
       if (tw.isFound) continue;
+      // Bonus words are hidden from the UI until found, so revealing a
+      // letter in a bonus word is invisible to the player. Guide hints
+      // toward the required-word list only.
+      if (tw.isBonus) continue;
       final revealed = revealedPositions[tw.word] ?? const <int>{};
       final unrevealed = <int>[];
       for (var i = 0; i < tw.word.length; i++) {

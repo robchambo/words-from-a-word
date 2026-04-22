@@ -49,14 +49,28 @@ void main() {
       expect(result!.wordKey, 'dogs');
     });
 
-    test('includes bonus words', () {
+    test('skips bonus words (they are hidden from the slot list)', () {
+      // A reveal on a hidden bonus word would be invisible to the player —
+      // guide hints toward required words only.
       final result = GameEngine.pickSafeHintLetter(
         targetWords: [tw('cats', isBonus: true)],
         revealedPositions: {},
         rng: Random(42),
       );
+      expect(result, isNull);
+    });
+
+    test('prefers required words even when bonus words are present', () {
+      final result = GameEngine.pickSafeHintLetter(
+        targetWords: [
+          tw('cats', isBonus: true),
+          tw('dogs'),
+        ],
+        revealedPositions: {},
+        rng: Random(42),
+      );
       expect(result, isNotNull);
-      expect(result!.wordKey, 'cats');
+      expect(result!.wordKey, 'dogs');
     });
 
     test('seeded RNG is deterministic', () {
