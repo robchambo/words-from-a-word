@@ -58,6 +58,21 @@ class GameScreen extends StatelessWidget {
                     progress: progress,
                   ),
 
+                  // Replay mode banner
+                  if (state.isReplayMode)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      color: AppTheme.accent.withValues(alpha: 0.25),
+                      alignment: Alignment.center,
+                      child: Text(
+                        isRu
+                            ? StringsRu.replayModeBanner
+                            : StringsEn.replayModeBanner,
+                        style: AppTheme.condensedBold,
+                      ),
+                    ),
+
                   // Progress strip (bonus counter + banked hints)
                   ProgressStrip(mode: mode),
 
