@@ -61,11 +61,14 @@ class SettingsScreen extends StatelessWidget {
                   color: AppTheme.foreground,
                 ),
               ),
-              // Phase 1 disabled; Phase 4 enables.
               SettingsRow(
                 label: muteLabel,
-                enabled: false,
-                trailing: Switch(value: settings.muted, onChanged: null),
+                trailing: Switch(
+                  key: const Key('settings.mute.switch'),
+                  value: settings.muted,
+                  onChanged: (v) =>
+                      context.read<SettingsProvider>().setMuted(v),
+                ),
               ),
               // Phase 5 enables.
               SettingsRow(

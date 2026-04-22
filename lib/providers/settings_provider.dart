@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/language_mode.dart';
+import '../services/audio_service.dart';
 
 class SettingsProvider extends ChangeNotifier {
   static const _kLanguageMode = 'language_mode';
@@ -23,6 +24,7 @@ class SettingsProvider extends ChangeNotifier {
     }
     // else: no saved value — null means "first launch, no language chosen yet"
     _muted = prefs.getBool(_kMuted) ?? false;
+    audioService.setMuted(_muted);
     notifyListeners();
   }
 
@@ -36,6 +38,7 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setMuted(bool value) async {
     if (_muted == value) return;
     _muted = value;
+    audioService.setMuted(value);
     notifyListeners();
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_kMuted, value);

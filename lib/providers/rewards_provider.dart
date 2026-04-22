@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/language_mode.dart';
 import '../services/ad_gateway.dart';
 import '../services/achievement_engine.dart';
+import '../services/audio_service.dart';
 
 /// Owns all persisted v1.1 player state except language. See
 /// `docs/V1_1_CONTRACTS.md` for authoritative field list and persistence keys.
@@ -206,6 +207,7 @@ class RewardsProvider extends ChangeNotifier {
   void addPurchasedHints(int n) {
     if (n <= 0) return;
     purchasedHintCount += n;
+    audioService.playBonusRefill();
     notifyListeners();
     save();
   }
@@ -224,6 +226,7 @@ class RewardsProvider extends ChangeNotifier {
         bonusWordCounter = 0;
         freeHintSlot += 1;
         freeHintEarnedTicks.value = freeHintEarnedTicks.value + 1;
+        audioService.playFreeHintEarned();
         _achievements?.onFreeHintEarned();
       }
       // else keep at 10, slot is full; caller owns popup UX
