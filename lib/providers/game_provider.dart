@@ -35,6 +35,7 @@ class GameProvider extends ChangeNotifier {
   Timer? _shakeTimer;
   Timer? _lastFoundTimer;
   Timer? _tooCommonTimer;
+  Timer? _alreadyUsedTimer;
 
   Map<String, Set<int>> get _revealedPositionsSnapshot => {
         for (final tw in _state!.level.targetWords) tw.word: tw.revealedIndices,
@@ -143,6 +144,7 @@ class GameProvider extends ChangeNotifier {
       targetWords: s.level.targetWords,
       foundWords: s.foundWords,
       tooCommon: s.level.tooCommon,
+      bankedBonusesInLanguage: _bankedBonusSetForCurrentMode(),
     );
 
     if (result == WordValidationResult.invalid ||
@@ -181,13 +183,35 @@ class GameProvider extends ChangeNotifier {
       return;
     }
 
+    if (result == WordValidationResult.alreadyUsedElsewhere) {
+      HapticFeedback.lightImpact();
+      final level = _rewards.bankedBonusLevel(
+        mode: _mode!, word: word,
+      );
+      _state = s.copyWith(
+        selectedTileIds: [],
+        currentInput: '',
+        alreadyUsedWord: word,
+        alreadyUsedInLevel: level,
+        level: s.level.copyWith(
+          sourceLetters: s.level.sourceLetters
+              .map((t) => t.copyWith(isSelected: false))
+              .toList(),
+        ),
+      );
+      notifyListeners();
+      _alreadyUsedTimer?.cancel();
+      _alreadyUsedTimer = Timer(const Duration(milliseconds: 2000), () {
+        _state = _state!.copyWith(clearAlreadyUsedWord: true);
+        notifyListeners();
+      });
+      return;
+    }
+
     HapticFeedback.mediumImpact();
 
     final foundTarget = s.level.targetWords.firstWhere((tw) => tw.word == word);
     final points = GameEngine.scoreWord(word, isBonus: foundTarget.isBonus);
-    if (foundTarget.isBonus) {
-      _rewards.incrementBonusCounter();
-    }
     final newFoundWords = [...s.foundWords, word];
     final updatedTargetWords = s.level.targetWords
         .map((tw) => tw.word == word ? tw.copyWith(isFound: true) : tw)
@@ -343,6 +367,25 @@ class GameProvider extends ChangeNotifier {
       pendingScore: _state!.pendingScore,
       isReplay: _state!.isReplayMode,
     );
+
+    // Bank all provisional bonuses (found this session in the just-completed
+    // level). Hint counter increments once per newly-banked bonus.
+    if (!_state!.isReplayMode) {
+      final provisionalBonuses = _state!.level.targetWords
+          .where((tw) => tw.isBonus && tw.isFound)
+          .map((tw) => tw.word)
+          .toList();
+      if (provisionalBonuses.isNotEmpty) {
+        final newlyBanked = _rewards.bankBonusWords(
+          mode: mode,
+          levelId: _currentLevelIndex,
+          words: provisionalBonuses,
+        );
+        for (var i = 0; i < newlyBanked; i++) {
+          _rewards.incrementBonusCounter();
+        }
+      }
+    }
     // nextLevel is now called separately by the caller so LibraryCompleteScreen
     // (Phase 3) can interpose.
   }
@@ -363,11 +406,21 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Set<String> _bankedBonusSetForCurrentMode() {
+    final map = _rewards.bankedBonusWords[_mode!]!;
+    final out = <String>{};
+    for (final set in map.values) {
+      out.addAll(set);
+    }
+    return out;
+  }
+
   @override
   void dispose() {
     _shakeTimer?.cancel();
     _lastFoundTimer?.cancel();
     _tooCommonTimer?.cancel();
+    _alreadyUsedTimer?.cancel();
     super.dispose();
   }
 }
