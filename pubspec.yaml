@@ -1,7 +1,7 @@
 name: slova_iz_slova
 description: Russian/English word game for the US diaspora
 publish_to: 'none'
-version: 1.1.0-beta.5+5
+version: 1.1.0-beta.5+6
 
 environment:
   sdk: ^3.11.3
