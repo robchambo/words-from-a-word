@@ -4,11 +4,14 @@ import 'package:provider/provider.dart';
 import '../l10n/strings_en.dart';
 import '../l10n/strings_ru.dart';
 import '../models/language_mode.dart';
+import '../providers/rewards_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/purchases_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/grid_paper_background.dart';
 import '../widgets/rules_modal.dart';
 import '../widgets/settings_row.dart';
+import 'premium_pitch_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -16,6 +19,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final rewards = context.watch<RewardsProvider>();
     final isRussian = settings.languageMode == LanguageMode.russian;
 
     final title =
@@ -71,17 +75,24 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ),
               // Phase 5 enables.
-              SettingsRow(
-                label: removeAdsLabel,
-                enabled: false,
-                trailing: const Icon(
-                  Icons.chevron_right,
-                  color: AppTheme.foreground,
+              if (!rewards.premium)
+                SettingsRow(
+                  key: const Key('settings.remove_ads'),
+                  label: removeAdsLabel,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PremiumPitchScreen(),
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: AppTheme.foreground,
+                  ),
                 ),
-              ),
               SettingsRow(
+                key: const Key('settings.restore'),
                 label: restoreLabel,
-                enabled: false,
+                onTap: () => _restorePurchases(context, isRussian),
                 trailing: const Icon(
                   Icons.chevron_right,
                   color: AppTheme.foreground,
@@ -100,6 +111,20 @@ class SettingsScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _restorePurchases(BuildContext context, bool isRussian) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final msg = isRussian
+        ? StringsRu.settingsRestoring
+        : StringsEn.settingsRestoring;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    await PurchasesService.instance.restore();
   }
 
   void _openRulesModal(BuildContext context, SettingsProvider settings) {

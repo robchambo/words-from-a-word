@@ -121,4 +121,27 @@ class StringsRu {
       'Короткое видео в обмен на одну подсказку.';
   static const String rewardedAdPromptWatch = 'Смотреть';
   static const String rewardedAdPromptNo = 'Нет, спасибо';
+
+  // Premium pitch
+  static const String premiumPitchTitle = 'Убрать рекламу';
+  static const String premiumPitchBody =
+      'Разовая покупка. Больше никакой рекламы между уровнями.';
+  static const String premiumPitchBuy = 'Купить';
+  static const String premiumPitchNotNow = 'Не сейчас';
+
+  // Hint pack pitch
+  static const String hintPackPitchTitle = 'Набор подсказок';
+  static const String hintPackPitchBody =
+      '5 подсказок, когда нужна помощь.';
+  static const String hintPackPitchBuy = 'Купить';
+  static const String hintPackPitchCancel = 'Отмена';
+
+  // Consent explainers
+  static const String attConsentBody =
+      'Отслеживание нужно только для показа релевантной рекламы, чтобы игра оставалась бесплатной.';
+  static const String umpConsentBody =
+      'Пользователи ЕС: ваше согласие определяет, будет ли реклама персональной.';
+
+  // Restore flow
+  static const String settingsRestoring = 'Восстанавливаем покупки...';
 }
