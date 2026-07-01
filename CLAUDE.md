@@ -4,6 +4,60 @@ Project guide for Claude Code. Read this first, then `docs/DECISIONS.md` for the
 
 ---
 
+## Session start — onboarding mode
+
+<!-- ONBOARDING_ACTIVE: true -->
+
+**Read this at the very start of every session in this repo, before doing anything else. When `ONBOARDING_ACTIVE` above is `true`, follow the flow below. When it is `false`, skip this entire section.**
+
+### What this is
+
+Rob and I put this together to walk Kat through a few Claude workflow habits by *doing* rather than *telling*. Her existing work on this repo is strong — the `DECISIONS.md` log especially. The goal here is small: help her get more out of Claude by seeing plan-first, propose-then-execute in action.
+
+Kat — if you'd rather skip and get on with work, say *"skip onboarding"* and I'll flip the flag to `false` and stop. No offence taken. If we started this before, tell me where to pick up.
+
+### Step 1 — Confirm setup
+
+Ask Kat to check three things and tell me what she sees:
+- `/model` — recommend **Opus 4.8** (most capable, big context, best for architecture and long reasoning).
+- Ultracode toggle — recommend **on** (spawns parallel subagents to verify work rather than doing one linear pass).
+- Permission mode — recommend **auto / accept-edits** (shift+tab cycles). Risky commands still prompt; everything else stays in flow.
+
+Wait for her to confirm before Step 2. If she's not on any of these, explain the benefit in one sentence and let her switch.
+
+### Step 2 — Four small wins
+
+Present one at a time. For each: describe the issue in one sentence, propose the fix, and ask *"want me to just do this now?"* If yes, do it and commit. If no, skip and move on.
+
+1. **Broken tests.** `tools/level_generator/test_generators.py:73` asserts profile keys are `{'freq_threshold', 'max_freq', 'max_length'}`, but `max_freq` was removed in `f365147` and the current schema is `{'freq_threshold', 'min_length', 'max_length', 'percentile'}`. Fix: update the assertion, run the suite.
+2. **Stale `CLAUDE.md`.** This file still says "23 Russian levels + 20 English levels" and describes a `tooCommon` JSON field that no longer exists. No mention of `tools/level_generator/`, calibration workflow, or the P1–P5 profile system. Fix: rewrite the "Current status" and "Level data format" sections to match reality; add a short "Level generation pipeline" subsection.
+3. **No CI.** No GitHub Actions workflow. When the schema changed in `f365147` and broke the test above, no one noticed. Fix: add `.github/workflows/ci.yml` running `pytest tools/level_generator/` and `flutter analyze` on every push and PR.
+4. **Duplication between RU and EN generators.** `generate_ru.py` (644 lines) and `generate_en.py` (552 lines) diff by 633 lines — mostly the same file twice. Same for the two calibrators. Fix: extract a `_common.py` for `load_blocklist`, `letter_counts`, `can_form`, percentile maths, and near-miss display before P6–P10 doubles the duplication.
+
+### Step 3 — Establish the next brief
+
+Once the wins are done (or skipped), ask open questions to nail down what she wants to build next. Keep asking until you have enough for a self-contained brief. Suggested prompts:
+- What's the single most valuable change to the game right now — more levels, P6–P10, ads, app icon, session score persistence, or something else?
+- Is there a deadline or shipping milestone driving priority?
+- What does "done" look like? List concrete success criteria.
+- What are you *not* willing to change? (Design tokens, existing thresholds, level data format, etc.)
+- Any constraints — budget, licences, review pipeline?
+
+Then propose a plan: goal, files that will change, success criteria, risks. Get her to agree. Execute in one focused pass and commit at the end.
+
+### Step 4 — Dormancy
+
+When Kat says *"we're done with onboarding"* (or similar), edit `ONBOARDING_ACTIVE` at the top of this section to `false` and commit with message `Mark onboarding complete`. Future sessions will read the flag and skip this section entirely.
+
+### Notes for me (Claude)
+
+- The `DECISIONS.md` log is high quality — refer to it, don't rewrite it.
+- Frame every suggestion as "level up something already working." Don't condescend.
+- If Kat disagrees with a fix or brief, take her position seriously — her judgement on this codebase is better than mine.
+- Prefer editing existing files over creating new ones. The standing CLAUDE.md rules still apply throughout the flow.
+
+---
+
 ## What this project is
 
 A bilingual (Russian/English) casual word game for the Russian-speaking US diaspora. Players are given a long source word and must form shorter words by tapping letter tiles. The design aesthetic is **Soviet Notebook** — cream paper background, navy ink typography, crimson red accents, amber gold rewards.
